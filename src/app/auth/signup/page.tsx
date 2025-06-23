@@ -1,14 +1,15 @@
-"use client";
-
 import Link from "next/link";
+import { signup } from "../actions";
+import ErrorMessage from "./error-message";
 
-export default function SignUpPage() {
+export default async function SignUpPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const params = await searchParams
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header with Logo */}
       <header className="p-6 md:p-8">
         <Link href="/" className="text-6xl" style={{ color: '#495867', fontFamily: 'var(--font-carattere)' }}>
-          S
+          Studii
         </Link>
       </header>
 
@@ -22,8 +23,10 @@ export default function SignUpPage() {
               Sign Up
             </h1>
 
+            <ErrorMessage searchParams={params} />
+            
             {/* Form */}
-            <form className="space-y-6">
+            <form action={signup} className="space-y-6">
               {/* Email Field */}
               <div>
                 <label htmlFor="email" className="block text-sm font-medium mb-2" style={{ color: '#495867' }}>
@@ -57,10 +60,8 @@ export default function SignUpPage() {
               {/* Sign Up Button */}
               <button
                 type="submit"
-                className="w-full py-3 rounded-lg text-white font-medium transition-colors"
+                className="w-full py-3 rounded-lg text-white font-medium transition-colors hover:opacity-90"
                 style={{ backgroundColor: '#FE5F55' }}
-                onMouseEnter={(e) => (e.target as HTMLElement).style.backgroundColor = '#fe4a3f'}
-                onMouseLeave={(e) => (e.target as HTMLElement).style.backgroundColor = '#FE5F55'}
               >
                 Sign Up
               </button>
