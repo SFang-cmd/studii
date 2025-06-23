@@ -1,26 +1,49 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #BDD5EA;
+  --foreground: #495867;
+  
+  /* Custom Color Palette */
+  --paynes-gray: #495867;
+  --glaucous: #577399;
+  --columbia-blue: #BDD5EA;
+  --ghost-white: #F7F7FF;
+  --bittersweet: #FE5F55;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-carlito);
+  --font-display: var(--font-carattere);
+  
+  /* Custom colors for Tailwind */
+  --color-paynes-gray: var(--paynes-gray);
+  --color-glaucous: var(--glaucous);
+  --color-columbia-blue: var(--columbia-blue);
+  --color-ghost-white: var(--ghost-white);
+  --color-bittersweet: var(--bittersweet);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #BDD5EA;
+    --foreground: #495867;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-carlito), Arial, Helvetica, sans-serif;
+}
+
+/* Custom button hover styles */
+.login-btn:hover {
+  background-color: #49586710 !important;
+}
+
+.cta-btn:hover {
+  background-color: #fe4a3f !important;
 }
