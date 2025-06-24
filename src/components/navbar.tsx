@@ -32,8 +32,12 @@ export default async function NavBar() {
           <>
             <Link 
               href="/auth/login" 
-              className="text-lg hover:underline transition-colors"
-              style={{ color: '#577399' }}
+              className="login-button px-6 py-2 border-2 rounded-full transition-colors"
+              style={{ 
+                borderColor: '#577399', 
+                color: '#577399',
+                backgroundColor: 'transparent'
+              }}
             >
               Log In
             </Link>

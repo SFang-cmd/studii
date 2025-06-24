@@ -3,6 +3,7 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
+import { headers } from "next/headers"
 
 export async function login(formData: FormData) {
     const supabase = await createClient()
@@ -58,3 +59,34 @@ export async function logout() {
     revalidatePath('/', 'layout')
     redirect('/')
 }
+
+async function signInWithOAuth(provider: 'google' | 'facebook') {
+    const supabase = await createClient()
+    const origin = (await headers()).get('origin')
+    
+    const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+            redirectTo: `${origin}/auth/callback`,
+        },
+    })
+
+    if (error) {
+        console.error(`Error with ${provider} OAuth:`, error)
+        redirect('/auth/login?error=oauth_failed')
+        return
+    }
+
+    if (data.url) {
+        redirect(data.url)
+    }
+}
+
+export async function signInWithGoogle() {
+    return signInWithOAuth('google')
+}
+
+export async function signInWithFacebook() {
+    return signInWithOAuth('facebook')
+}
+

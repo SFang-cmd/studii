@@ -4,7 +4,7 @@ export default function ErrorMessage({ searchParams }: { searchParams: { error?:
   if (searchParams.error === 'login_failed') {
     return (
       <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200">
-        <p className="text-red-600 text-sm">Invalid email or password. Please try again.</p>
+        <p className="text-red-600 text-sm">Login failed. Please check your credentials and try again.</p>
       </div>
     )
   }
