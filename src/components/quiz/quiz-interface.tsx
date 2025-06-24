@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { QuestionCard } from './question-card';
-import { QuizProgressBar } from './quiz-progress-bar';
-import { AnswerExplanation } from './answer-explanation';
+import { QuestionCard } from '../shared/question-card';
+import { QuizProgressBar } from '../shared/quiz-progress-bar';
+import { AnswerExplanation } from '../shared/answer-explanation';
 
 interface QuizOption {
   id: string;

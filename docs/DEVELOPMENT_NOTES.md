@@ -6,32 +6,11 @@
 
 ---
 
-## Current Session Progress (Date: 2025-01-24)
+## Current Session Progress (Date: 2025-06-24)
 
 ### ✅ Completed Features
 
-#### **1. Landing Page Design**
-- **Custom Color Scheme**: 
-  - Payne's Gray (#495867) - Logo, headings
-  - Columbia Blue (#BDD5EA) - Background
-  - Bittersweet (#FE5F55) - Primary buttons
-  - Glaucous (#577399) - Subtitle text
-- **Typography**: Carlito (body), Carattere (logo)
-- **Responsive Design**: Mobile-first approach
-- **Navigation**: Functional buttons linking to auth pages
-
-#### **2. Authentication UI**
-- **Signup Page** (`/auth/signup`):
-  - Email/password form with proper styling
-  - Social login button placeholders (Google, LinkedIn, Facebook)
-  - Link to login page
-- **Login Page** (`/auth/login`):
-  - Email/password form
-  - "Forgot password?" link
-  - Link to signup page
-- **Consistent Design**: Matches landing page aesthetic
-
-#### **3. Complete Authentication System**
+#### **1. Authentication System** (Complete)
 - **Email/Password Authentication**: Fully functional signup/login with Supabase
 - **OAuth Integration**: Google and Facebook social login with proper branding
 - **Server Actions**: Template pattern for extensible OAuth providers
@@ -39,38 +18,55 @@
 - **User Management**: Profile dropdown with logout functionality
 - **Error Handling**: User-friendly error messages and validation
 - **Session Management**: SSR-compatible authentication with proper cookie handling
-- **Route Protection**: Middleware protecting dashboard and profile pages
+- **Route Protection**: Middleware protecting dashboard and practice pages
+
+#### **2. Complete Dashboard & Quiz System** (Complete)
+- **SAT Structure Implementation**: Full hierarchical organization
+  - **2 Subjects**: Math, English
+  - **8 Content Domains**: Algebra, Advanced Math, Problem-Solving & Data Analysis, Geometry & Trigonometry, Information & Ideas, Craft & Structure, Expression of Ideas, Standard English Conventions
+  - **35+ Individual Skills**: Complete breakdown of each domain into specific skills
+- **Interactive Dashboard**: User greeting, progress overview, organized content display
+- **Advanced Filtering System**: Search + subject/domain filters with condensed horizontal UI
+- **6-Tier Rank System**: Bronze → Silver → Gold → Jade → Ruby → Diamond with geometric progression
+- **Complete Quiz Interface**: Question/answer flow with progress tracking and explanations
+- **Dynamic Practice Routes**: Single `/practice/[[...params]]` page handles all practice levels
+
+#### **3. Component Architecture Refactor** (Complete)
+- **Organized by Use-Case**: 
+  - `components/dashboard/` - Dashboard-specific components
+  - `components/quiz/` - Quiz-specific components  
+  - `components/shared/` - Reusable components
+- **Clean Exports**: Index files for easier imports
+- **Single Dynamic Route**: Consolidated 3 practice pages into 1 catch-all route
 
 ### 🔄 Next Immediate Steps
 
-#### **Phase 2: Dashboard & Quiz Foundation (Priority 1)**
-1. **Dashboard Layout**:
-   - User greeting with personalized welcome
-   - Progress overview cards and statistics
-   - Subject cards grid (Math, English, Reading, Science)
-   - Recent activity and performance highlights
+#### **Phase 3: Database Integration (Priority 1)**
+1. **Supabase Schema Design**:
+   - Create tables for questions, user progress, quiz sessions
+   - Define relationships between subjects, domains, skills
+   - Implement user scoring and progress tracking
    
-2. **Question/Answer Interface**:
-   - Multiple choice question display component
-   - Answer selection and submission logic
-   - Basic quiz flow (question → answer → next)
-   - Results and feedback system
+2. **Question Bank Implementation**:
+   - Replace dummy data with real SAT questions
+   - Import question bank with proper categorization
+   - Implement question selection algorithms
    
-3. **Database Integration**:
-   - Connect to Supabase for questions and user progress
-   - Implement question fetching and answer storage
-   - Track user performance and progress
+3. **Progress Persistence**:
+   - Save user scores and progress to database
+   - Track performance across different skill areas
+   - Implement rank progression based on actual performance
 
-#### **Phase 3: Core Features (Priority 2)**
-1. **Progress Tracking System**:
-   - XP system and level progression
-   - Performance analytics and insights
+#### **Phase 4: Advanced Features (Priority 2)**
+1. **Analytics Dashboard**:
+   - Performance insights and trends
    - Weakness identification and recommendations
+   - Detailed progress reports
    
-2. **Adaptive Learning Algorithm**:
+2. **Adaptive Learning**:
    - Question difficulty adjustment based on performance
    - Personalized study paths
-   - Smart question selection
+   - Smart question selection algorithms
 
 #### **Future Authentication Enhancements (Lower Priority)**
 1. **Forgot Password Flow**:
@@ -112,6 +108,33 @@
 
 ---
 
+## Critical Development Notes & Warnings ⚠️
+
+### **Next.js 15 Specific Requirements**
+- **Async Params**: Always use `await params` in dynamic routes - `const { subject } = await params;`
+- **Middleware-Only Auth**: Remove redundant auth checks in pages - middleware handles all authentication
+- **Component Imports**: Use organized imports - `import { NavBar } from '@/components/shared'`
+
+### **SAT Structure Implementation**
+- **Hierarchical Data**: All components expect Subject → Domain → Skill structure from `sat-structure.ts`
+- **Rank Calculations**: Progress bars show within-tier progress, not total progress
+- **Dynamic Routing**: Single `/practice/[[...params]]` handles all practice levels
+- **Filter Logic**: Search queries match across all levels (subjects, domains, skills)
+
+### **Component Organization Rules**
+- **Dashboard components**: Only import from `components/dashboard/`
+- **Quiz components**: Only import from `components/quiz/`
+- **Shared components**: Reusable across multiple areas
+- **Index files**: Use for clean imports - `import { SubjectCard } from '@/components/dashboard'`
+
+### **Performance Considerations**
+- **Server Components**: Keep most components server-side for better performance
+- **Client Components**: Only use 'use client' when absolutely necessary (filters, interactive state)
+- **Middleware Auth**: More performant than page-level auth checks
+- **Condensed UI**: Horizontal layouts perform better than collapsible sections
+
+---
+
 ## Important Development Notes
 
 ### **Server Development**
@@ -148,7 +171,8 @@ src/
 │   ├── page.tsx (landing)
 │   ├── layout.tsx (fonts: Carlito, Carattere)
 │   ├── globals.css (color scheme + auth button styles)
-│   ├── dashboard/page.tsx (protected)
+│   ├── dashboard/page.tsx (protected, SAT structure dashboard)
+│   ├── practice/[[...params]]/page.tsx (dynamic practice routes)
 │   ├── profile/page.tsx (protected)
 │   └── auth/
 │       ├── actions.ts (server actions for auth/OAuth)
@@ -156,9 +180,29 @@ src/
 │       ├── login/page.tsx (with OAuth buttons)
 │       └── signup/page.tsx (with OAuth buttons)
 ├── components/
-│   ├── navbar.tsx (dynamic auth-aware navigation)
-│   └── user-dropdown.tsx (profile dropdown)
+│   ├── dashboard/
+│   │   ├── index.ts (clean exports)
+│   │   ├── subject-card.tsx
+│   │   ├── domain-card.tsx
+│   │   ├── skill-card.tsx
+│   │   ├── all-topics-card.tsx
+│   │   ├── dashboard-filter.tsx
+│   │   └── dashboard-content.tsx
+│   ├── quiz/
+│   │   ├── index.ts (clean exports)
+│   │   ├── quiz-interface.tsx
+│   │   ├── quiz-progress-bar.tsx
+│   │   ├── question-card.tsx
+│   │   └── answer-explanation.tsx
+│   └── shared/
+│       ├── index.ts (clean exports)
+│       ├── navbar.tsx (dynamic auth-aware navigation)
+│       ├── user-dropdown.tsx (profile dropdown)
+│       └── rank-icon.tsx (geometric rank icons)
+├── types/
+│   └── sat-structure.ts (complete SAT hierarchy and helpers)
 ├── utils/
+│   ├── rank-system.ts (rank calculation logic)
 │   └── supabase/
 │       ├── client.ts (browser)
 │       ├── server.ts (SSR)

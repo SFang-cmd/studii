@@ -1,4 +1,4 @@
-import NavBar from "@/components/navbar";
+import NavBar from "@/components/shared/navbar";
 import HomeButton from "@/components/home-button";
 
 export default function Home() {

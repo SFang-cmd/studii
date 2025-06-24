@@ -1,5 +1,5 @@
-import NavBar from "@/components/navbar";
-import { QuizInterface } from "@/components/quiz-interface";
+import NavBar from "@/components/shared/navbar";
+import { QuizInterface } from "@/components/quiz/quiz-interface";
 import { notFound } from "next/navigation";
 
 // Dummy question data - will be replaced with database data
