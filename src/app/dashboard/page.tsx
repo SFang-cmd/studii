@@ -1,73 +1,71 @@
-import Link from "next/link";
+import { createClient } from "@/utils/supabase/server";
+import NavBar from "@/components/navbar";
+import { SubjectCard } from "@/components/subject-card";
+import { AllTopicsCard } from "@/components/all-topics-card";
 
-export default function Dashboard() {
+// Dummy data - will be replaced with real data from database
+const dummySubjects = [
+  { subject: "Math", currentScore: 770 },
+  { subject: "English", currentScore: 922 }
+];
+
+export default async function Dashboard() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  // Calculate total score from all subjects
+  const totalScore = Math.round(dummySubjects.reduce((sum, subject) => sum + subject.currentScore, 0) / dummySubjects.length);
+  
+  // Get user's first name or fallback to "there"
+  const firstName = user?.user_metadata?.full_name?.split(' ')[0] || "there";
+
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <header className="p-6 md:p-8 flex justify-between items-center">
-        <Link href="/" className="text-6xl" style={{ color: '#495867', fontFamily: 'var(--font-carattere)' }}>
-          Studii
-        </Link>
-        <div className="text-right">
-          <p className="text-sm" style={{ color: '#577399' }}>Welcome back!</p>
-        </div>
-      </header>
+      <NavBar />
 
       {/* Main Content */}
-      <main className="flex-1 p-6 md:p-8">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl font-bold mb-8" style={{ color: '#495867' }}>
-            Dashboard
-          </h1>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Math Card */}
-            <div className="bg-white rounded-3xl shadow-lg p-6">
-              <h2 className="text-2xl font-bold mb-4" style={{ color: '#495867' }}>
-                Math
-              </h2>
-              <p className="text-sm mb-4" style={{ color: '#577399' }}>
-                Practice algebra, geometry, and more
+      <main className="flex-1 px-6 md:px-8 pb-8">
+        <div className="max-w-6xl mx-auto">
+          {/* Welcome Section */}
+          <div className="flex flex-col lg:flex-row lg:items-start gap-6 mb-8">
+            <div className="flex-1">
+              <h1 className="text-4xl md:text-5xl font-bold text-paynes-gray mb-2">
+                Hey, {firstName}!
+              </h1>
+              <p className="text-xl text-glaucous">
+                Ready to practice?
               </p>
-              <button 
-                className="w-full py-3 rounded-lg text-white font-medium transition-colors"
-                style={{ backgroundColor: '#FE5F55' }}
-              >
-                Start Practice
-              </button>
             </div>
+            
+            <div className="lg:w-80">
+              <AllTopicsCard 
+                totalScore={totalScore}
+                maxScore={1200}
+                href="/practice"
+              />
+            </div>
+          </div>
 
-            {/* English Card */}
-            <div className="bg-white rounded-3xl shadow-lg p-6">
-              <h2 className="text-2xl font-bold mb-4" style={{ color: '#495867' }}>
-                English
-              </h2>
-              <p className="text-sm mb-4" style={{ color: '#577399' }}>
-                Reading comprehension and writing
-              </p>
-              <button 
-                className="w-full py-3 rounded-lg text-white font-medium transition-colors"
-                style={{ backgroundColor: '#FE5F55' }}
-              >
-                Start Practice
-              </button>
-            </div>
+          {/* Filter Section */}
+          <div className="bg-glaucous rounded-2xl p-6 mb-8">
+            <button className="flex items-center gap-2 bg-bittersweet text-white px-4 py-2 rounded-lg font-medium">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 6h18M7 12h10m-7 6h4"/>
+              </svg>
+              Filter
+            </button>
+          </div>
 
-            {/* Progress Card */}
-            <div className="bg-white rounded-3xl shadow-lg p-6">
-              <h2 className="text-2xl font-bold mb-4" style={{ color: '#495867' }}>
-                Progress
-              </h2>
-              <p className="text-sm mb-4" style={{ color: '#577399' }}>
-                Track your improvement
-              </p>
-              <button 
-                className="w-full py-3 rounded-lg text-white font-medium transition-colors"
-                style={{ backgroundColor: '#FE5F55' }}
-              >
-                View Stats
-              </button>
-            </div>
+          {/* Subject Cards Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {dummySubjects.map((subject, index) => (
+              <SubjectCard
+                key={index}
+                subject={subject.subject}
+                currentScore={subject.currentScore}
+                href={`/practice/${subject.subject.toLowerCase().replace(/\s+/g, '-')}`}
+              />
+            ))}
           </div>
         </div>
       </main>
