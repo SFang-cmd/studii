@@ -1,9 +1,10 @@
 import { RankIcon } from '../shared/rank-icon';
-import { getRankFromScore } from '@/utils/rank-system';
+import { getSubjectRankFromScore } from '@/utils/rank-system';
 import Link from 'next/link';
+import { SATSubject } from '@/types/sat-structure';
 
 interface SubjectCardProps {
-  subject: string;
+  subject: SATSubject;
   currentScore: number;
   maxScore?: number;
   href?: string;
@@ -12,9 +13,9 @@ interface SubjectCardProps {
 export function SubjectCard({ 
   subject, 
   currentScore, 
-  href = `/practice/${subject.toLowerCase().replace(/\s+/g, '-')}` 
+  href = `/practice/${subject.id.toLowerCase().replace(/\s+/g, '-')}` 
 }: SubjectCardProps) {
-  const rankInfo = getRankFromScore(currentScore);
+  const rankInfo = getSubjectRankFromScore(currentScore);
   
   // Calculate progress within the current rank tier
   const progressWithinTier = (currentScore - rankInfo.minScore) / (rankInfo.maxScore - rankInfo.minScore);
@@ -26,14 +27,14 @@ export function SubjectCard({
     'English': 'bg-blue-50 border-blue-100'
   };
 
-  const cardColor = subjectColors[subject] || 'bg-gray-50 border-gray-100';
+  const cardColor = subjectColors[subject.name] || 'bg-gray-50 border-gray-100';
 
   const CardContent = (
     <div className={`${cardColor} rounded-2xl p-6 shadow-sm border hover:shadow-md transition-all duration-200 cursor-pointer hover:scale-[1.02]`}
     >
       <div className="flex items-center justify-between">
         <div className="flex-1">
-          <h3 className="text-2xl font-bold text-paynes-gray mb-1">{subject}</h3>
+          <h3 className="text-2xl font-bold text-paynes-gray mb-1">{subject.name}</h3>
           <p 
             className="text-sm font-medium capitalize mb-4"
             style={{ color: rankInfo.color }}
@@ -47,7 +48,7 @@ export function SubjectCard({
                 {currentScore}/{rankInfo.maxScore}
               </span>
               <span className="text-xs text-gray-500">
-                {rankInfo.minScore} - {rankInfo.maxScore}
+                {subject.domains.length} domains
               </span>
             </div>
             

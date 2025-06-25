@@ -1,17 +1,23 @@
 import { RankIcon } from '../shared/rank-icon';
-import { getRankFromScore } from '@/utils/rank-system';
+import { getDomainRankFromScore } from '@/utils/rank-system';
 import { SATDomain } from '@/types/sat-structure';
+import { UserProgress } from '@/data/dummy-progress';
+import { calculateDomainScore } from '@/utils/score-calculations';
 import Link from 'next/link';
 
 interface DomainCardProps {
   domain: SATDomain;
   subjectId: string;
+  userProgress: UserProgress;
   size?: 'small' | 'medium' | 'large';
 }
 
-export function DomainCard({ domain, subjectId, size = 'medium' }: DomainCardProps) {
-  const rankInfo = getRankFromScore(domain.currentScore);
-  const progressWithinTier = (domain.currentScore - rankInfo.minScore) / (rankInfo.maxScore - rankInfo.minScore);
+export function DomainCard({ domain, subjectId, userProgress, size = 'medium' }: DomainCardProps) {
+  const currentScore = calculateDomainScore(domain, userProgress);
+  const rankInfo = getDomainRankFromScore(currentScore);
+
+  // Calculate progress within the current rank tier
+  const progressWithinTier = (currentScore - rankInfo.minScore) / (rankInfo.maxScore - rankInfo.minScore);
   const progressPercentage = Math.max(0, Math.min(100, progressWithinTier * 100));
   
   const href = `/practice/${subjectId}/${domain.id}`;
@@ -43,7 +49,7 @@ export function DomainCard({ domain, subjectId, size = 'medium' }: DomainCardPro
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium text-gray-700">
-                {domain.currentScore}/{domain.maxScore}
+                {currentScore}/{rankInfo.maxScore}
               </span>
               <span className="text-xs text-gray-500">
                 {domain.skills.length} skills

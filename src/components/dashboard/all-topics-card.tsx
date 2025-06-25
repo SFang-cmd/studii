@@ -1,5 +1,5 @@
 import { RankIcon } from '../shared/rank-icon';
-import { getRankFromScore } from '@/utils/rank-system';
+import { getOverallRankFromScore } from '@/utils/rank-system';
 import Link from 'next/link';
 
 interface AllTopicsCardProps {
@@ -10,10 +10,9 @@ interface AllTopicsCardProps {
 
 export function AllTopicsCard({ 
   totalScore, 
-  maxScore = 1200,
   href = '/practice'
 }: AllTopicsCardProps) {
-  const rankInfo = getRankFromScore(totalScore);
+  const rankInfo = getOverallRankFromScore(totalScore);
   
   // Calculate progress within the current rank tier
   const progressWithinTier = (totalScore - rankInfo.minScore) / (rankInfo.maxScore - rankInfo.minScore);
@@ -34,7 +33,7 @@ export function AllTopicsCard({
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium text-gray-700">
-                {totalScore}/{maxScore}
+                {totalScore}/{rankInfo.maxScore}
               </span>
             </div>
             

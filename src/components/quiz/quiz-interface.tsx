@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { QuestionCard } from '../shared/question-card';
-import { QuizProgressBar } from '../shared/quiz-progress-bar';
-import { AnswerExplanation } from '../shared/answer-explanation';
+import { QuestionCard } from './question-card';
+import { QuizProgressBar } from './quiz-progress-bar';
+import { AnswerExplanation } from './answer-explanation';
 
 interface QuizOption {
   id: string;
@@ -29,7 +29,7 @@ interface QuizInterfaceProps {
 
 type QuizState = 'question' | 'explanation' | 'summary';
 
-export function QuizInterface({ questions, subject, subjectTitle }: QuizInterfaceProps) {
+export function QuizInterface({ questions, subjectTitle }: QuizInterfaceProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
   const [quizState, setQuizState] = useState<QuizState>('question');
@@ -202,11 +202,11 @@ export function QuizInterface({ questions, subject, subjectTitle }: QuizInterfac
   return (
     <div>
       {/* Header with Title and Progress Bar */}
+      <h1 className="text-3xl font-bold text-paynes-gray mb-1">
+        {subjectTitle} Practice
+      </h1>
       <div className="flex items-center mb-6">
         <div className="flex-1">
-          <h1 className="text-3xl font-bold text-paynes-gray mb-1">
-            {subjectTitle} Practice
-          </h1>
           <p className="text-glaucous">
             Question {currentQuestionIndex + 1} of {currentSetQuestions.length}
           </p>
