@@ -12,6 +12,8 @@ import {
   UserSessionAnswerInsert,
   Question,
   QuestionInsert,
+  UserProfile,
+  UserProfileUpdate,
 } from '@/types/database'
 import { getAllSkillIds } from '@/types/sat-structure'
 import { getSkillIdFromSATCode } from '@/utils/sat-skill-mapping'
@@ -858,4 +860,183 @@ export async function questionExistsByExternalId(externalId: string): Promise<bo
   }
   
   return (data?.length || 0) > 0
+}
+
+// ==================== USER PROFILES FUNCTIONS ====================
+
+// Get user profile by user ID
+export async function getUserProfile(userId: string): Promise<UserProfile | null> {
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('user_id', userId)
+    .single()
+  
+  if (error || !data) {
+    return null
+  }
+  
+  return data
+}
+
+// Create or update user profile
+export async function upsertUserProfile(
+  userId: string, 
+  profileData: Partial<UserProfileUpdate>
+): Promise<UserProfile | null> {
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .upsert({
+      user_id: userId,
+      ...profileData
+    })
+    .select()
+    .single()
+  
+  if (error) {
+    console.error('Error upserting user profile:', error)
+    return null
+  }
+  
+  return data
+}
+
+// Update user's last login timestamp
+export async function updateLastLogin(userId: string): Promise<boolean> {
+  const supabase = await createClient()
+  
+  const { error } = await supabase
+    .from('user_profiles')
+    .update({ last_login_at: new Date().toISOString() })
+    .eq('user_id', userId)
+  
+  if (error) {
+    console.error('Error updating last login:', error)
+    return false
+  }
+  
+  return true
+}
+
+// Complete onboarding for user
+export async function completeOnboarding(
+  userId: string,
+  onboardingData: {
+    display_name?: string;
+    study_goal_score?: number;
+    preferred_subjects?: string[];
+    study_time_goal_minutes?: number;
+    timezone?: string;
+  }
+): Promise<UserProfile | null> {
+  return upsertUserProfile(userId, {
+    ...onboardingData,
+    onboarding_completed: true
+  })
+}
+
+// Update study streak (called after completing quiz session)
+export async function updateStudyStreak(userId: string): Promise<boolean> {
+  const supabase = await createClient()
+  
+  const { error } = await supabase.rpc('update_study_streak', {
+    user_uuid: userId
+  })
+  
+  if (error) {
+    console.error('Error updating study streak:', error)
+    return false
+  }
+  
+  return true
+}
+
+// Get user study statistics
+export async function getUserStudyStats(userId: string): Promise<{
+  profile: UserProfile | null;
+  current_streak: number;
+  longest_streak: number;
+  total_study_days: number;
+  days_since_last_study: number;
+  goal_progress_percentage: number;
+}> {
+  const profile = await getUserProfile(userId)
+  
+  if (!profile) {
+    return {
+      profile: null,
+      current_streak: 0,
+      longest_streak: 0,
+      total_study_days: 0,
+      days_since_last_study: 0,
+      goal_progress_percentage: 0
+    }
+  }
+  
+  // Calculate days since last study
+  const supabase = await createClient()
+  const { data: lastSession } = await supabase
+    .from('quiz_sessions')
+    .select('started_at')
+    .eq('user_id', userId)
+    .eq('is_completed', true)
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .single()
+  
+  let daysSinceLastStudy = 0
+  if (lastSession) {
+    const lastStudyDate = new Date(lastSession.started_at)
+    const today = new Date()
+    daysSinceLastStudy = Math.floor((today.getTime() - lastStudyDate.getTime()) / (1000 * 60 * 60 * 24))
+  }
+  
+  // Calculate goal progress (if user has goal score)
+  let goalProgressPercentage = 0
+  if (profile.study_goal_score) {
+    // Get user's current overall score
+    const skillScores = await getUserSkillProgress(userId)
+    const totalScore = Object.values(skillScores).reduce((sum, score) => sum + score, 0)
+    const currentScore = totalScore // Sum of Math + English
+    
+    // Calculate progress towards goal (current score / goal score * 100)
+    goalProgressPercentage = Math.min((currentScore / profile.study_goal_score) * 100, 100)
+  }
+  
+  return {
+    profile,
+    current_streak: profile.study_streak_days,
+    longest_streak: profile.longest_streak_days,
+    total_study_days: profile.total_study_days,
+    days_since_last_study: daysSinceLastStudy,
+    goal_progress_percentage: goalProgressPercentage
+  }
+}
+
+// Check if user needs onboarding
+export async function needsOnboarding(userId: string): Promise<boolean> {
+  const profile = await getUserProfile(userId)
+  return !profile?.onboarding_completed
+}
+
+// Get users with study reminders enabled (for background jobs)
+export async function getUsersNeedingReminders(): Promise<UserProfile[]> {
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('notifications_enabled', true)
+    .eq('email_reminders', true)
+    .order('last_login_at', { ascending: false })
+  
+  if (error || !data) {
+    return []
+  }
+  
+  return data
 }

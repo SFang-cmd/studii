@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { QuestionCard } from './question-card';
 import { QuizProgressBar } from './quiz-progress-bar';
 import { AnswerExplanation } from './answer-explanation';
@@ -11,29 +11,69 @@ interface QuizOption {
 }
 
 interface QuizQuestion {
-  id: number;
+  id: number | string;
   question: string;
-  type: 'multiple-choice';
+  stimulus?: string;
+  type: 'multiple-choice' | 'free-response';
   imageUrl?: string;
   options: QuizOption[];
   correctAnswer: string;
   explanation: string;
   category?: string;
+  difficulty?: number;
+  skillId?: string;
 }
 
 interface QuizInterfaceProps {
   questions: QuizQuestion[];
   subject: string;
   subjectTitle: string;
+  sessionId?: string;
+  userId?: string;
 }
 
 type QuizState = 'question' | 'explanation' | 'summary';
 
-export function QuizInterface({ questions, subjectTitle }: QuizInterfaceProps) {
+export function QuizInterface({ questions, subjectTitle, sessionId, userId }: QuizInterfaceProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
   const [quizState, setQuizState] = useState<QuizState>('question');
   const [currentSet, setCurrentSet] = useState(0);
+  const questionStartTime = useRef<number>(Date.now());
+  const [totalQuestionsAnswered, setTotalQuestionsAnswered] = useState(0);
+  const [correctAnswersCount, setCorrectAnswersCount] = useState(0);
+  const sessionStartTime = useRef<number>(Date.now());
+
+  // Handle session cleanup when component unmounts or user leaves
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (sessionId && totalQuestionsAnswered > 0) {
+        // Complete the session with current stats
+        const timeSpentMinutes = Math.floor((Date.now() - sessionStartTime.current) / 60000);
+        
+        fetch('/api/complete-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            totalQuestions: totalQuestionsAnswered,
+            correctAnswers: correctAnswersCount,
+            timeSpentMinutes
+          }),
+          keepalive: true // Ensures request completes even if page is closing
+        }).catch(console.error);
+      }
+    };
+
+    // Add event listeners for page exit
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    // Cleanup on component unmount
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      handleBeforeUnload(); // Also complete session on component unmount
+    };
+  }, [sessionId, totalQuestionsAnswered, correctAnswersCount]);
 
   const questionsPerSet = 10;
   const totalSets = Math.ceil(questions.length / questionsPerSet);
@@ -62,20 +102,56 @@ export function QuizInterface({ questions, subjectTitle }: QuizInterfaceProps) {
   // Check if all questions in current set are completed
   const allQuestionsCompleted = currentSetQuestions.every(q => selectedAnswers[q.id]);
 
-  const handleAnswerSelect = (questionId: number, answerId: string) => {
+  const handleAnswerSelect = (questionId: number | string, answerId: string) => {
     setSelectedAnswers(prev => ({
       ...prev,
       [questionId]: answerId
     }));
   };
 
-  const handleSubmitAnswer = () => {
+  const handleSubmitAnswer = async () => {
     if (selectedAnswers[currentQuestion.id]) {
+      const isCorrect = selectedAnswers[currentQuestion.id] === currentQuestion.correctAnswer;
+      
+      // Update tracking counters
+      setTotalQuestionsAnswered(prev => prev + 1);
+      if (isCorrect) {
+        setCorrectAnswersCount(prev => prev + 1);
+      }
+      
+      // Record answer in database if we have session info
+      if (sessionId && userId && currentQuestion.skillId) {
+        const timeSpent = Math.floor((Date.now() - questionStartTime.current) / 1000);
+        
+        try {
+          await fetch('/api/record-answer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sessionId,
+              questionId: currentQuestion.id,
+              skillId: currentQuestion.skillId,
+              difficultyLevel: currentQuestion.difficulty || 4,
+              userAnswer: selectedAnswers[currentQuestion.id],
+              correctAnswer: currentQuestion.correctAnswer,
+              isCorrect,
+              timeSpentSeconds: timeSpent
+            })
+          });
+        } catch (error) {
+          console.error('Error recording answer:', error);
+          // Continue with quiz even if recording fails
+        }
+      }
+      
       setQuizState('explanation');
     }
   };
 
   const handleNextFromExplanation = () => {
+    // Reset timer for next question
+    questionStartTime.current = Date.now();
+    
     if (currentQuestionIndex < currentSetQuestions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
       setQuizState('question');

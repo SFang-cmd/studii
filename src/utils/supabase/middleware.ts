@@ -37,8 +37,12 @@ export async function updateSession(request: NextRequest) {
 
   // Define protected routes that require authentication
   const protectedRoutes = ['/dashboard', '/practice', '/profile', '/settings']
+  // Protect all API routes except public ones
   const isProtectedRoute = protectedRoutes.some(route => 
     request.nextUrl.pathname.startsWith(route)
+  ) || (
+    request.nextUrl.pathname.startsWith('/api/') && 
+    !request.nextUrl.pathname.startsWith('/api/public/')
   )
 
   // Redirect unauthenticated users from protected routes

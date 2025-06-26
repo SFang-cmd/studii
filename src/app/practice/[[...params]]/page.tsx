@@ -2,6 +2,8 @@ import NavBar from "@/components/shared/navbar";
 import { QuizInterface } from "@/components/quiz/quiz-interface";
 import { notFound } from "next/navigation";
 import { getSubjectById, getDomainById, getSkillById, SAT_STRUCTURE } from "@/types/sat-structure";
+import { createClient } from "@/utils/supabase/server";
+import { createQuizSession, getQuestionsForPractice, getQuestionsBySkill } from "@/utils/database";
 
 // Generate questions based on the practice level
 const generateQuestions = (level: 'all' | 'subject' | 'domain' | 'skill', context: any) => {
@@ -53,6 +55,14 @@ interface PracticePageProps {
 
 export default async function PracticePage({ params }: PracticePageProps) {
   const { params: routeParams } = await params;
+  
+  // Get current user
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    notFound();
+  }
   
   // Parse the route parameters
   let level: 'all' | 'subject' | 'domain' | 'skill' = 'all';
@@ -108,7 +118,60 @@ export default async function PracticePage({ params }: PracticePageProps) {
     }
   }
 
-  const questions = generateQuestions(level, context);
+  // Always create a new quiz session for this practice attempt
+  let quizSession = null;
+  let questions;
+  
+  try {
+    // Determine session type and target
+    const sessionType = level === 'all' ? 'subject' : level;
+    const targetId = level === 'skill' ? skillId : 
+                    level === 'domain' ? domainId : 
+                    level === 'subject' ? subjectId : 'mixed';
+    
+    // Always create a fresh session for each practice attempt
+    if (targetId !== 'mixed') {
+      quizSession = await createQuizSession({
+        user_id: user.id,
+        session_type: sessionType as 'subject' | 'domain' | 'skill',
+        target_id: targetId
+      });
+    }
+    
+    // Try to get questions from database first
+    if (level === 'skill' && skillId) {
+      const dbQuestions = await getQuestionsBySkill(skillId, {
+        difficultyRange: [1, 7],
+        limit: 10,
+        randomOrder: true
+      });
+      
+      if (dbQuestions.length > 0) {
+        // Convert database questions to quiz format
+        questions = dbQuestions.map((q) => ({
+          id: q.id,
+          question: q.question_text,
+          stimulus: q.stimulus,
+          type: q.question_type === 'mcq' ? 'multiple-choice' as const : 'free-response' as const,
+          options: q.answer_options || [],
+          correctAnswer: q.correct_answers[0],
+          explanation: q.explanation || '',
+          category: context.skillData?.name || 'Practice',
+          difficulty: q.difficulty_level,
+          skillId: q.skill_id
+        }));
+      }
+    }
+    
+    // Fallback to generated questions if no database questions available
+    if (!questions || questions.length === 0) {
+      questions = generateQuestions(level, context);
+    }
+    
+  } catch (error) {
+    console.error('Error setting up quiz session:', error);
+    questions = generateQuestions(level, context);
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-columbia-blue">
@@ -120,6 +183,8 @@ export default async function PracticePage({ params }: PracticePageProps) {
             questions={questions}
             subject={subjectId || 'mixed'}
             subjectTitle={title}
+            sessionId={quizSession?.id}
+            userId={user.id}
           />
         </div>
       </main>

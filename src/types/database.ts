@@ -182,6 +182,64 @@ export interface QuestionUpdate {
   sat_update_date?: number;
 }
 
+// ==================== USER PROFILES ====================
+
+export interface UserProfile {
+  id: string;
+  user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  study_goal_score: number | null;
+  preferred_subjects: string[];
+  study_time_goal_minutes: number;
+  study_streak_days: number;
+  longest_streak_days: number;
+  total_study_days: number;
+  notifications_enabled: boolean;
+  email_reminders: boolean;
+  progress_reports: boolean;
+  onboarding_completed: boolean;
+  last_login_at: string | null;
+  timezone: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserProfileInsert {
+  user_id: string;
+  display_name?: string;
+  avatar_url?: string;
+  study_goal_score?: number;
+  preferred_subjects?: string[];
+  study_time_goal_minutes?: number;
+  study_streak_days?: number;
+  longest_streak_days?: number;
+  total_study_days?: number;
+  notifications_enabled?: boolean;
+  email_reminders?: boolean;
+  progress_reports?: boolean;
+  onboarding_completed?: boolean;
+  last_login_at?: string;
+  timezone?: string;
+}
+
+export interface UserProfileUpdate {
+  display_name?: string;
+  avatar_url?: string;
+  study_goal_score?: number;
+  preferred_subjects?: string[];
+  study_time_goal_minutes?: number;
+  study_streak_days?: number;
+  longest_streak_days?: number;
+  total_study_days?: number;
+  notifications_enabled?: boolean;
+  email_reminders?: boolean;
+  progress_reports?: boolean;
+  onboarding_completed?: boolean;
+  last_login_at?: string;
+  timezone?: string;
+}
+
 // Database schema for Supabase client
 export interface Database {
   public: {
@@ -205,6 +263,11 @@ export interface Database {
         Row: Question;
         Insert: QuestionInsert;
         Update: QuestionUpdate;
+      };
+      user_profiles: {
+        Row: UserProfile;
+        Insert: UserProfileInsert;
+        Update: UserProfileUpdate;
       };
     };
   };
