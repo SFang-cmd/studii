@@ -1,15 +1,28 @@
 import { createClient } from "@/utils/supabase/server";
 import NavBar from "@/components/shared/navbar";
 import { AllTopicsCard, DashboardContent } from "@/components/dashboard";
-import { DUMMY_USER_PROGRESS } from "@/data/dummy-progress";
+import { getUserSkillProgress } from "@/utils/database";
 import { calculateOverallScore } from "@/utils/score-calculations";
 
 export default async function Dashboard() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   
-  // Calculate overall SAT score using dummy user progress
-  const totalScore = calculateOverallScore(DUMMY_USER_PROGRESS);
+  if (!user) {
+    // Redirect to login if not authenticated
+    return null;
+  }
+  
+  // Get user progress from database
+  const skillScores = await getUserSkillProgress(user.id);
+  const userProgress = {
+    userId: user.id,
+    skillScores,
+    lastUpdated: new Date()
+  };
+  
+  // Calculate overall SAT score using real user progress
+  const totalScore = calculateOverallScore(userProgress);
   
   // Get user's first name or fallback to "there"
   const firstName = user?.user_metadata?.full_name?.split(' ')[0] || "there";
@@ -42,7 +55,7 @@ export default async function Dashboard() {
           </div>
 
           {/* Dashboard Content with Filtering */}
-          <DashboardContent userProgress={DUMMY_USER_PROGRESS} />
+          <DashboardContent userProgress={userProgress} />
         </div>
       </main>
     </div>
