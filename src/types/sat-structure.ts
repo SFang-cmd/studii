@@ -81,7 +81,12 @@ export const SAT_STRUCTURE: SATSubject[] = [
           },
           {
             id: 'nonlinear-equations-systems',
-            name: 'Nonlinear Equations in One Variable and Systems of Equations in Two Variables',
+            name: 'Nonlinear Equations in One Variable & Systems of Equations in Two Variables',
+            maxScore: 800
+          },
+          {
+            id: 'equivalent-expressions',
+            name: 'Equivalent Expressions',
             maxScore: 800
           }
         ]
@@ -105,12 +110,12 @@ export const SAT_STRUCTURE: SATSubject[] = [
           },
           {
             id: 'one-variable-data',
-            name: 'One-Variable Data: Distributions and Measures of Center and Spread',
+            name: 'One-Variable Data: Distributions & Measures of Center & Spread',
             maxScore: 800
           },
           {
             id: 'two-variable-data',
-            name: 'Two-Variable Data: Models and Scatterplots',
+            name: 'Two-Variable Data: Models & Scatterplots',
             maxScore: 800
           },
           {
@@ -125,7 +130,7 @@ export const SAT_STRUCTURE: SATSubject[] = [
           },
           {
             id: 'statistical-claims',
-            name: 'Evaluating Statistical Claims: Observational Studies and Experiments',
+            name: 'Evaluating Statistical Claims: Observational Studies & Experiments',
             maxScore: 800
           }
         ]
@@ -260,6 +265,14 @@ export const SAT_STRUCTURE: SATSubject[] = [
 // Helper functions
 export function getSubjectById(id: string): SATSubject | undefined {
   return SAT_STRUCTURE.find(subject => subject.id === id);
+}
+
+export function getAllSkillIds(): string[] {
+  return SAT_STRUCTURE.flatMap(subject => 
+    subject.domains.flatMap(domain => 
+      domain.skills.map(skill => skill.id)
+    )
+  );
 }
 
 export function getDomainById(subjectId: string, domainId: string): SATDomain | undefined {
