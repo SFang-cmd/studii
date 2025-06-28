@@ -1,6 +1,6 @@
 # Development Notes - Studii SAT Prep Application
 
-## Current Status: Phase 4 Database Integration (In Progress - Partially Complete)
+## Current Status: Phase 4 Database Integration (In Progress - Mostly Complete)
 
 ### Phase History Overview
 
@@ -15,8 +15,8 @@
 
 #### **Phase 4**: Database Integration (In Progress) 🚧
 - 5/6 database schemas implemented (score_cache skipped)
-- Basic integration complete but several features still buggy
-- Real database integration partially replacing dummy data
+- Database integration mostly complete with refactored question fetching
+- Real database integration replacing dummy data
 
 ---
 
@@ -34,18 +34,20 @@
 - Dashboard integration with real database scores
 
 **🚧 Partially Working**:
-- Quiz interface basic structure (questions may not display correctly)
+- Quiz interface basic structure (questions display correctly)
 - Answer recording API endpoint (not tested end-to-end)
-- Database question loading (basic implementation exists)
+- Database question loading (refactored and simplified)
 
 **❌ Known Bugs & Missing Features**:
-1. Quiz interface doesn't properly show questions from database
-2. Answer recording doesn't update user skill scores
-3. No tracking of completed questions to prevent repeats
-4. Question display formatting issues with database answer options
-5. No connection between quiz performance and skill score updates
-6. Session analytics not fully integrated
-7. No adaptive difficulty based on user performance
+1. Answer recording doesn't update user skill scores
+2. ~~Question display formatting issues with some database answer options~~ (Fixed - June 2025)
+3. ~~No connection between quiz performance and skill score updates~~ (Partially Fixed - June 2025)
+4. Session analytics not fully integrated
+5. No adaptive difficulty based on user performance
+6. Skill points difficulty calculation has inconsistencies (Partially Fixed - June 2025)
+   - Database `difficulty_band` values not consistently mapped to frontend
+   - Some UI components still show incorrect point values
+   - Points update on page exit implemented but needs further testing
 
 #### 1. User Skill Progress (`user_skill_progress`) ✅
 **Purpose**: Store atomic skill-level scores per user
@@ -112,7 +114,7 @@ quiz_sessions {
 - `getActiveQuizSession()` - Find incomplete session for resuming
 - `getUserSessionStats()` - Calculate comprehensive user statistics
 
-#### 3. User Session Answers (`user_session_answers`) 🚧
+#### 3. User Session Answers (`user_session_answers`) ✅
 **Purpose**: Track individual question attempts within sessions
 **Key Features**:
 - Granular question-level tracking with timing
@@ -120,7 +122,7 @@ quiz_sessions {
 - Support for retry attempts
 - Detailed analytics for adaptive learning
 
-**⚠️ Implementation Status**: Schema complete, API endpoint exists, but not fully integrated with quiz interface. Answer recording works but doesn't update skill scores.
+**⚠️ Implementation Status**: Schema complete, API endpoint exists, fully integrated with quiz interface. Answer recording works but doesn't update skill scores.
 
 **Schema**:
 ```sql
@@ -129,7 +131,7 @@ user_session_answers {
   session_id UUID REFERENCES quiz_sessions(id),
   question_id UUID NOT NULL,
   skill_id TEXT NOT NULL,
-  difficulty_level INTEGER (1-7 SAT scale),
+  difficulty INTEGER (1-7 SAT scale),  /* Updated from difficulty_level */
   user_answer TEXT,
   correct_answer TEXT NOT NULL,
   is_correct BOOLEAN NOT NULL,
@@ -168,12 +170,14 @@ questions {
   stimulus TEXT,                             -- SAT's 'stimulus' (passages/figures)
   question_type TEXT DEFAULT 'mcq',          -- 'mcq', 'grid_in', 'free_response'
   skill_id TEXT NOT NULL,                    -- Maps to SAT_STRUCTURE
+  domain_id TEXT NOT NULL,                   -- Direct domain reference
+  subject_id TEXT NOT NULL,                  -- Direct subject reference
   sat_skill_code TEXT,                       -- Original SAT code (e.g., 'H.D.')
   sat_domain_code TEXT,                      -- SAT domain (e.g., 'H' for Algebra)
   sat_program TEXT DEFAULT 'SAT',            -- SAT, P10, P89
-  difficulty_level INTEGER (1-7),           -- SAT's score_band_range_cd
-  sat_difficulty_letter TEXT,               -- E, M, H
-  sat_score_band INTEGER (1-7),             -- Original score_band_range_cd
+  difficulty INTEGER (1-7),                  -- SAT's score_band_range_cd (renamed from difficulty_level)
+  difficulty_band INTEGER (1-7),             -- Renamed from sat_score_band for clarity
+  sat_difficulty_letter TEXT,                -- E, M, H
   answer_options JSONB,                      -- [{id, content, is_correct}]
   correct_answers TEXT[] NOT NULL,           -- ['C'] or ['2.5'] for grid-in
   explanation TEXT,                          -- SAT's 'rationale'
@@ -187,15 +191,23 @@ questions {
 }
 ```
 
-**Database Functions** (8 total):
+**Database Functions** (7 total):
 - `createQuestion()` - Add new question
 - `getQuestionById()` - Get single question
-- `getQuestionsForPractice()` - Smart selection avoiding repeats
-- `getQuestionsBySkill()` - Flexible filtering by skill/difficulty
-- `searchQuestions()` - Full-text content search
+- `getQuestionsForPractice()` - Smart selection avoiding repeats (refactored)
+- `getQuestionsBySkill()` - Flexible filtering by skill/difficulty (updated)
+- `searchQuestions()` - Full-text content search (updated)
 - `importSATQuestion()` - Direct SAT API data import with mapping
 - `getQuestionStats()` - Question bank analytics
 - `questionExistsByExternalId()` - Duplicate prevention for scraping
+
+**Recent Updates (June 2025)**:
+- Removed legacy function `getLegacyQuestionsForPractice()`
+- Consolidated question fetching to use PostgreSQL stored procedure
+- Updated all references from `difficulty_level` to `difficulty`
+- Added direct `domain_id` and `subject_id` fields to questions table
+- Renamed `sat_score_band` to `difficulty_band` for clarity
+- Improved error handling in question fetching functions
 
 #### 5. User Profiles (`user_profiles`) ✅
 **Purpose**: Extended user data beyond Supabase auth
@@ -513,7 +525,14 @@ CREATE INDEX idx_questions_search ON questions USING GIN (to_tsvector('english',
 ## Current Development Status (December 2024)
 
 ### Session Progress Summary
-**✅ Completed Today**:
+**✅ Completed Today (June 2025)**:
+1. Fixed HTML rendering in quiz components using dangerouslySetInnerHTML
+2. Fixed stimulus content display in question cards
+3. Added proper handling for both HTML/SVG content and plain text with newlines
+4. Fixed data mapping issue where stimulus was incorrectly mapped to imageUrl
+5. Added global CSS for table styling in HTML content
+
+**✅ Completed Previously**:
 1. User profile auto-initialization on dashboard first visit
 2. Fresh quiz session creation for every practice attempt  
 3. Session cleanup with beforeunload handlers and study streak updates
@@ -522,12 +541,12 @@ CREATE INDEX idx_questions_search ON questions USING GIN (to_tsvector('english',
 6. 20 simple dummy math questions added to database
 
 **🚧 Partially Complete**:
-1. Quiz interface loads questions from database but display may be buggy
+1. Quiz interface loads questions from database with proper HTML rendering
 2. Answer recording API endpoint created but not fully tested
 3. Session tracking works but doesn't update user skill scores
 
 **❌ Still Needed**:
-1. Fix quiz interface to properly display database questions
+1. ~~Fix quiz interface to properly display database questions~~ (Fixed - June 2025)
 2. Connect answer recording to skill score updates
 3. Implement question completion tracking to prevent repeats
 4. Test full quiz flow end-to-end
@@ -541,13 +560,78 @@ CREATE INDEX idx_questions_search ON questions USING GIN (to_tsvector('english',
 - Quiz session cleanup with beforeunload event handling
 - Study streak automatic updates on session completion
 
+## Skill Rank Points Tracking Implementation (June 2025)
+
+### Overview
+Implemented a dynamic skill rank points tracking system that calculates and updates user skill scores based on quiz performance. This system integrates with the existing quiz flow and updates the database with new skill scores after each quiz set completion.
+
+### Implementation Details
+
+#### 1. API Endpoints
+- **`/api/user-progress`**: Created new endpoint to fetch user skill scores
+  - Uses Supabase authentication for security
+  - Queries `user_skill_progress` table for current scores
+  - Returns formatted skill scores for frontend consumption
+  - Includes error handling and authorization checks
+
+- **`/api/update-skill-scores`**: Utilized existing endpoint to update scores in database
+  - Accepts batch updates for multiple skills
+  - Performs upsert operations to handle new skills
+
+#### 2. Frontend Integration
+- **`QuizInterface` Component**:
+  - Added state variables for tracking skill points and user progress
+  - Implemented fetching of user progress on component mount
+  - Added point calculation logic in `handleSubmitAnswer` function
+  - Created useEffect hook to process final point changes on quiz completion
+  - Added fallback mechanism for API failures
+
+- **`QuizSummary` Component**:
+  - Extended props to accept and display point changes
+  - Added visual indicators for skill point changes
+
+#### 3. Rank Points Calculation
+- Points awarded based on question difficulty and correctness
+- Default skill score of 200 for new users/skills
+- Scores clamped between 0-800 (SAT scale)
+- Points propagate through skill → domain → subject hierarchy
+
+### Known Issues
+
+#### ❌ Critical Issues
+1. **Infinite API Loop**: Fixed an issue where the `useEffect` hook was causing infinite API calls to `/api/update-skill-scores`
+   - Root cause: State updates triggering repeated effect execution
+   - Solution: Implemented a ref-based flag to prevent multiple processing of the same quiz summary
+
+#### ⚠️ Outstanding Issues
+1. **Visual Feedback**: Skills cards in the UI don't visually update to reflect new scores
+   - Users can't see their progress immediately after completing a quiz
+   - Need to refresh the dashboard to see updated scores
+
+2. **Database Synchronization**: Inconsistent database updates observed in some cases
+   - Some skill score updates may not be persisted correctly
+   - Potential race conditions between multiple API calls
+
+3. **Error Handling**: Current implementation has basic error handling but needs improvement
+   - API failures should be more gracefully handled with retries
+   - Better user feedback needed when updates fail
+
+### Future Improvements
+1. **Optimistic UI Updates**: Update UI immediately before API confirmation
+2. **Batch Processing**: Reduce API calls by batching score updates
+3. **Visual Animations**: Add animations to show score changes
+4. **Offline Support**: Cache updates and sync when online
+5. **Comprehensive Testing**: Add end-to-end tests for the entire flow
+
 ## Next Development Priorities
 
 ### Immediate (Next Session)
-1. **Fix Quiz Display**: Debug database question rendering in quiz interface
-2. **Connect Score Updates**: Link quiz performance to user_skill_progress updates
-3. **Test Integration**: End-to-end testing of quiz flow with database
-4. **Question Tracking**: Implement completed question history to prevent repeats
+1. ~~**Fix Quiz Display**: Debug database question rendering in quiz interface~~ (Completed - June 2025)
+2. ~~**Connect Score Updates**: Link quiz performance to user_skill_progress updates~~ (Partially Completed - June 2025)
+3. **Fix Visual Feedback**: Ensure skill cards update visually after quiz completion
+4. **Improve Database Sync**: Address inconsistent database updates for skill scores
+5. **Test Integration**: End-to-end testing of quiz flow with database
+6. **Question Tracking**: Implement completed question history to prevent repeats
 
 ### Short Term (Next 1-2 Sessions)
 1. **Adaptive Question Selection**: Use analytics to adjust difficulty
@@ -565,6 +649,36 @@ CREATE INDEX idx_questions_search ON questions USING GIN (to_tsvector('english',
 3. **Social Features**: Study groups and leaderboards
 
 ---
+
+## HTML Rendering Implementation (June 2025)
+
+### Issue Fixed
+The quiz application needed to properly render HTML content stored as strings in various fields:
+1. Question text (`question.question`)
+2. Stimulus content (`question.stimulus`) - contains complex HTML/SVG content
+3. Answer options (`option.text`)
+4. Explanations (`question.explanation`)
+5. Chat messages
+
+### Root Cause
+The main issue was in the data mapping from database to frontend. In the practice page, the `stimulus` field was incorrectly mapped to `imageUrl` instead of `stimulus` in the QuizQuestion interface, causing the stimulus content not to display.
+
+### Implementation Details
+1. Used React's `dangerouslySetInnerHTML` to render HTML content safely
+2. Added whitespace handling with `whitespace-pre-line` class for plain text with newlines
+3. Added global CSS styles for tables in HTML content
+4. Fixed the data mapping in `/src/app/practice/[[...params]]/page.tsx`
+5. Updated component structure to display stimulus before question text
+
+### Components Modified
+- `QuestionCard`: Updated to use dangerouslySetInnerHTML for question and stimulus
+- `AnswerExplanation`: Updated to use dangerouslySetInnerHTML for explanations and chat messages
+
+### TODOs for HTML Rendering
+1. Add sanitization for user-generated content if implemented in the future
+2. Consider adding a markdown parser for simpler content entry
+3. Test with more complex SVG and table content
+4. Add more comprehensive styling for other HTML elements (blockquotes, code blocks, etc.)
 
 ## Technical Implementation Notes
 

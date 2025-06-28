@@ -1,7 +1,7 @@
 // Score Calculation Functions (Separated from Structure)
 
 import { SATDomain, SATSubject, SAT_STRUCTURE } from '@/types/sat-structure';
-import { UserProgress } from '@/data/dummy-progress';
+import { UserProgress } from '@/types/user-progress';
 
 // Calculate domain score from skill averages using user progress (scaled to 800)
 export function calculateDomainScore(domain: SATDomain, userProgress: UserProgress): number {

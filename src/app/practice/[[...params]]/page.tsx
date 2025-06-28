@@ -1,62 +1,144 @@
 import NavBar from "@/components/shared/navbar";
-import { QuizInterface } from "@/components/quiz/quiz-interface";
+import { QuizInterface, QuizQuestion } from "@/components/quiz/quiz-interface";
 import { notFound } from "next/navigation";
-import { getSubjectById, getDomainById, getSkillById, SAT_STRUCTURE } from "@/types/sat-structure";
-import { createClient } from "@/utils/supabase/server";
-import { createQuizSession, getQuestionsForPractice, getQuestionsBySkill } from "@/utils/database";
+import { getSubjectById, getDomainById, getSkillById } from "@/types/sat-structure";
+import { createClient } from '@/utils/supabase/server'
+import { getQuestionsForPractice, createQuizSession } from '@/utils/database'
+import { Question } from '@/types/database'
 
-// Generate questions based on the practice level
-const generateQuestions = (level: 'all' | 'subject' | 'domain' | 'skill', context: any) => {
-  const questionCount = 10;
-  let questionContext = '';
-  let category = '';
-
-  switch (level) {
-    case 'all':
-      questionContext = 'comprehensive SAT practice covering all subjects and domains';
-      category = 'Mixed Practice';
-      break;
-    case 'subject':
-      questionContext = `${context.subjectData.name} practice covering all domains`;
-      category = context.subjectData.name;
-      break;
-    case 'domain':
-      questionContext = `${context.domainData.name} practice within ${context.subjectData.name}`;
-      category = context.domainData.name;
-      break;
-    case 'skill':
-      questionContext = `${context.skillData.name} focused practice`;
-      category = context.skillData.name;
-      break;
-  }
-
-  return Array.from({ length: questionCount }, (_, i) => ({
+// Simple fallback questions when database fetch fails
+const generateFallbackQuestions = (level: string, context?: string): QuizQuestion[] => {
+  return Array.from({ length: 5 }, (_, i) => ({
     id: i + 1,
-    question: `Question ${i + 1}: ${questionContext}. This question focuses on key concepts within this area.`,
+    question: "<p>Sample question ${i + 1}. Database questions could not be loaded.</p>",
     type: "multiple-choice" as const,
-    imageUrl: context.ismath ? "/images/graph-example.png" : undefined,
     options: [
-      { id: "A", text: "Option A - First possible answer" },
-      { id: "B", text: "Option B - Second possible answer" },
-      { id: "C", text: "Option C - Third possible answer" },
-      { id: "D", text: "Option D - Fourth possible answer" }
+      { id: "A", text: "<p>Option A</p>" },
+      { id: "B", text: "<p>Option B</p>" },
+      { id: "C", text: "<p>Option C</p>" },
+      { id: "D", text: "<p>Option D</p>" }
     ],
-    correctAnswer: ["A", "B", "C", "D"][i % 4],
-    explanation: `This question tests your understanding of ${category}. The correct approach involves...`,
-    category: category
+    correctAnswer: "A",
+    explanation: "This is a placeholder question. Please try refreshing the page.",
+    category: context || "Practice",
+    difficulty: 3,
+    skillId: "fallback-skill"
   }));
 };
 
+/**
+ * Server-side function to fetch questions directly from database
+ * @param level - The level of practice (all, subject, domain, or skill)
+ * @param target - The target identifier (subject ID, domain ID, or skill ID)
+ * @param userId - The user's ID for tracking answered questions
+ * @returns Array of questions for the practice session
+ */
+async function fetchQuestionsForLevel(
+  level: 'all' | 'subject' | 'domain' | 'skill',
+  target: string | undefined,
+  userId: string
+) {
+  try {
+    let contextName = '';
+    
+    // Get the name of the context for display purposes
+    if (target) {
+      switch (level) {
+        case 'skill':
+          const skillData = getSkillById(target);
+          if (!skillData) return [];
+          contextName = skillData.name;
+          break;
+          
+        case 'domain':
+          const domainData = getDomainById(target);
+          if (!domainData) return [];
+          contextName = domainData.name;
+          break;
+          
+        case 'subject':
+          const subjectData = getSubjectById(target);
+          if (!subjectData) return [];
+          contextName = subjectData.name;
+          break;
+      }
+    } else if (level === 'all') {
+      contextName = 'Mixed Practice';
+    }
+    
+    // Use the consolidated function to fetch questions
+    const questions: Question[] = await getQuestionsForPractice({
+      level,
+      targetId: target,
+      difficultyRange: [1, 7],
+      limit: 10,
+      excludeAnsweredQuestions: true,
+      userId
+    }) || [];
+
+
+    // Transform database questions to match the QuizQuestion interface
+    return questions.map(q => {
+      // Debug logging for stimulus
+      console.log(`Question ${q.id} has stimulus:`, Boolean(q.stimulus));
+      if (q.stimulus) {
+        console.log(`Stimulus preview for question ${q.id}:`, q.stimulus.substring(0, 50));
+      }
+      
+      // Debug logging for difficulty values
+      console.log(`Question ${q.id} difficulty values:`, {
+        difficulty: q.difficulty,
+        difficultyBand: q.difficulty_band,
+        difficultyLetter: q.sat_difficulty_letter
+      });
+      
+      return {
+        id: typeof q.id === 'number' ? q.id : parseInt(q.id) || Math.floor(Math.random() * 10000),
+        question: q.question_text,
+        stimulus: q.stimulus || undefined,  // Correctly map stimulus to stimulus
+        type: "multiple-choice" as const,
+        options: q.answer_options?.map(option => ({
+          id: option.id,
+          text: option.content
+        })) || [],
+        correctAnswer: q.correct_answers?.[0] || '',
+        explanation: q.explanation || 'No explanation available.',
+        category: contextName,
+        // Include all difficulty properties from the database
+        difficulty: q.difficulty,
+        // Convert null to undefined to match the QuizQuestion interface
+        difficultyBand: q.difficulty_band !== null ? q.difficulty_band : undefined,
+        difficultyLetter: q.sat_difficulty_letter !== null ? q.sat_difficulty_letter : undefined,
+        skillId: q.skill_id
+      };
+    });
+
+  } catch (error) {
+    console.error('Error fetching questions:', error);
+    return [];
+  }
+}
+
+/**
+ * Props for the PracticePage component
+ */
 interface PracticePageProps {
   params: Promise<{
     params?: string[];
   }>;
 }
 
+/**
+ * Unified practice page component that handles all practice routes:
+ * - /practice (all subjects)
+ * - /practice/[subject] (subject-specific practice)
+ * - /practice/[subject]/[domain] (domain-specific practice)
+ * - /practice/[subject]/[domain]/[skill] (skill-specific practice)
+ */
 export default async function PracticePage({ params }: PracticePageProps) {
   const { params: routeParams } = await params;
   
-  // Get current user
+  // Get user from session
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -69,108 +151,102 @@ export default async function PracticePage({ params }: PracticePageProps) {
   let subjectId = '';
   let domainId = '';
   let skillId = '';
-  let title = 'SAT Practice';
+  let title = 'All Topics';
+  let target = '';
 
   if (!routeParams || routeParams.length === 0) {
     // /practice - All subjects
     level = 'all';
-    title = 'SAT Practice - All Topics';
+    target = 'all';
   } else if (routeParams.length === 1) {
     // /practice/math or /practice/english
     level = 'subject';
     subjectId = routeParams[0];
+    target = subjectId;
   } else if (routeParams.length === 2) {
     // /practice/math/algebra
     level = 'domain';
     subjectId = routeParams[0];
     domainId = routeParams[1];
+    target = domainId;
   } else if (routeParams.length === 3) {
     // /practice/math/algebra/linear-equations-one-var
     level = 'skill';
     subjectId = routeParams[0];
     domainId = routeParams[1];
     skillId = routeParams[2];
+    target = skillId;
   } else {
     notFound();
   }
 
-  // Validate and get data based on level
-  let context: any = { ismath: subjectId === 'math' };
+  // Validate IDs and set title based on level
+  let contextName = 'All Topics';
   
-  if (level === 'subject' || level === 'domain' || level === 'skill') {
+  if (level === 'subject') {
     const subjectData = getSubjectById(subjectId);
     if (!subjectData) notFound();
-    context.subjectData = subjectData;
     title = `${subjectData.name} Practice`;
-
-    if (level === 'domain' || level === 'skill') {
-      const domainData = getDomainById(subjectId, domainId);
-      if (!domainData) notFound();
-      context.domainData = domainData;
-      title = `${subjectData.name} - ${domainData.name}`;
-
-      if (level === 'skill') {
-        const skillData = getSkillById(subjectId, domainId, skillId);
-        if (!skillData) notFound();
-        context.skillData = skillData;
-        title = `${subjectData.name} - ${skillData.name}`;
-      }
-    }
+    contextName = subjectData.name;
+  } else if (level === 'domain') {
+    const subjectData = getSubjectById(subjectId);
+    const domainData = getDomainById(domainId);
+    if (!subjectData || !domainData) notFound();
+    title = `${subjectData.name} - ${domainData.name}`;
+    contextName = domainData.name;
+  } else if (level === 'skill') {
+    const subjectData = getSubjectById(subjectId);
+    const skillData = getSkillById(skillId);
+    if (!subjectData || !skillData) notFound();
+    title = `${subjectData.name} - ${skillData.name}`;
+    contextName = skillData.name;
   }
 
-  // Always create a new quiz session for this practice attempt
+  // Create quiz session for tracking
   let quizSession = null;
-  let questions;
-  
   try {
     // Determine session type and target
     const sessionType = level === 'all' ? 'subject' : level;
-    const targetId = level === 'skill' ? skillId : 
-                    level === 'domain' ? domainId : 
-                    level === 'subject' ? subjectId : 'mixed';
+    const sessionTarget = level === 'skill' ? skillId : 
+                         level === 'domain' ? domainId : 
+                         level === 'subject' ? subjectId : 'all';
     
     // Always create a fresh session for each practice attempt
-    if (targetId !== 'mixed') {
+    if (sessionTarget !== 'all') {
       quizSession = await createQuizSession({
         user_id: user.id,
         session_type: sessionType as 'subject' | 'domain' | 'skill',
-        target_id: targetId
+        target_id: sessionTarget
       });
     }
+  } catch (error) {
+    console.error('Error creating quiz session:', error);
+    // Continue without session tracking if it fails
+  }
+
+  // Fetch questions from database
+  let questions: QuizQuestion[] = [];
+  try {
+    console.log('=== PRACTICE PAGE DEBUG ===');
+    console.log('Level:', level);
+    console.log('Target:', target);
+    console.log('User ID:', user.id);
+    console.log('========================');
     
-    // Try to get questions from database first
-    if (level === 'skill' && skillId) {
-      const dbQuestions = await getQuestionsBySkill(skillId, {
-        difficultyRange: [1, 7],
-        limit: 10,
-        randomOrder: true
-      });
-      
-      if (dbQuestions.length > 0) {
-        // Convert database questions to quiz format
-        questions = dbQuestions.map((q) => ({
-          id: q.id,
-          question: q.question_text,
-          stimulus: q.stimulus,
-          type: q.question_type === 'mcq' ? 'multiple-choice' as const : 'free-response' as const,
-          options: q.answer_options || [],
-          correctAnswer: q.correct_answers[0],
-          explanation: q.explanation || '',
-          category: context.skillData?.name || 'Practice',
-          difficulty: q.difficulty_level,
-          skillId: q.skill_id
-        }));
-      }
-    }
+    questions = await fetchQuestionsForLevel(level, target || undefined, user.id);
     
-    // Fallback to generated questions if no database questions available
-    if (!questions || questions.length === 0) {
-      questions = generateQuestions(level, context);
-    }
+    console.log('=== FETCHED QUESTIONS ===');
+    console.log('Questions count:', questions.length);
+    console.log('========================');
     
   } catch (error) {
-    console.error('Error setting up quiz session:', error);
-    questions = generateQuestions(level, context);
+    console.error('Error fetching database questions:', error);
+  }
+
+  // Fallback to generated questions if no database questions available
+  if (questions.length === 0) {
+    console.log('=== USING FALLBACK QUESTIONS ===');
+    questions = generateFallbackQuestions(level, contextName);
   }
 
   return (
@@ -179,12 +255,13 @@ export default async function PracticePage({ params }: PracticePageProps) {
 
       <main className="flex-1 px-6 md:px-8 py-8">
         <div className="max-w-6xl mx-auto">
-          <QuizInterface 
+          <QuizInterface
             questions={questions}
-            subject={subjectId || 'mixed'}
+            subject={level === 'subject' && target ? target : 'all'}
             subjectTitle={title}
             sessionId={quizSession?.id}
             userId={user.id}
+            sessionType={level === 'all' ? 'overall' : level as 'skill' | 'domain' | 'subject'}
           />
         </div>
       </main>

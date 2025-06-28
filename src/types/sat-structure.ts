@@ -262,6 +262,21 @@ export const SAT_STRUCTURE: SATSubject[] = [
   }
 ];
 
+// Create lookup maps for faster access with hierarchy information
+const domainMap = new Map<string, { domain: SATDomain; subject: SATSubject }>();
+const skillMap = new Map<string, { skill: SATSkill; domain: SATDomain; subject: SATSubject }>();
+
+// Initialize maps
+SAT_STRUCTURE.forEach(subject => {
+  subject.domains.forEach(domain => {
+    domainMap.set(domain.id, {domain, subject});
+    
+    domain.skills.forEach(skill => {
+      skillMap.set(skill.id, {skill, domain, subject});
+    });
+  });
+});
+
 // Helper functions
 export function getSubjectById(id: string): SATSubject | undefined {
   return SAT_STRUCTURE.find(subject => subject.id === id);
@@ -275,14 +290,23 @@ export function getAllSkillIds(): string[] {
   );
 }
 
-export function getDomainById(subjectId: string, domainId: string): SATDomain | undefined {
-  const subject = getSubjectById(subjectId);
-  return subject?.domains.find(domain => domain.id === domainId);
+export function getDomainById(domainId: string): SATDomain | undefined {
+  return domainMap.get(domainId)?.domain;
 }
 
-export function getSkillById(subjectId: string, domainId: string, skillId: string): SATSkill | undefined {
-  const domain = getDomainById(subjectId, domainId);
-  return domain?.skills.find(skill => skill.id === skillId);
+export function getSkillById(skillId: string): SATSkill | undefined {
+  return skillMap.get(skillId)?.skill;
+}
+
+// Fast lookup functions that preserve hierarchy information
+export function getDomainHierarchy(domainId: string): { domain: SATDomain; subject: SATSubject } | undefined {
+  const result = domainMap.get(domainId);
+  return result;
+}
+
+export function getSkillHierarchy(skillId: string): { skill: SATSkill; domain: SATDomain; subject: SATSubject } | undefined {
+  const result = skillMap.get(skillId);
+  return result;
 }
 
 export type PracticeLevel = 'subject' | 'domain' | 'skill';

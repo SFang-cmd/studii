@@ -200,60 +200,81 @@ export async function getUserProgressDetails(userId: string): Promise<UserSkillP
 
 // ==================== QUIZ SESSION FUNCTIONS ====================
 
-// Create a new quiz session
+// Create a new quiz session using the SQL function
 export async function createQuizSession(sessionData: QuizSessionInsert): Promise<QuizSession | null> {
   const supabase = await createClient()
   
-  const { data, error } = await supabase
-    .from('quiz_sessions')
-    .insert(sessionData)
-    .select()
-    .single()
+  const { data, error } = await supabase.rpc('start_quiz_session', {
+    p_user_id: sessionData.user_id,
+    p_session_type: sessionData.session_type,
+    p_target_id: sessionData.target_id
+  })
   
   if (error) {
     console.error('Error creating quiz session:', error)
     return null
   }
   
-  return data
+  return data[0] || null
 }
 
-// Update an existing quiz session
+// Update an existing quiz session using the SQL function
 export async function updateQuizSession(
   sessionId: string, 
   updates: QuizSessionUpdate
 ): Promise<QuizSession | null> {
   const supabase = await createClient()
   
-  const { data, error } = await supabase
-    .from('quiz_sessions')
-    .update(updates)
-    .eq('id', sessionId)
-    .select()
-    .single()
+  // If we're completing the session, use the complete_quiz_session function
+  if (updates.is_completed) {
+    return completeQuizSession(
+      sessionId, 
+      {
+        total_questions: updates.total_questions || 0,
+        correct_answers: updates.correct_answers || 0,
+        time_spent_minutes: updates.time_spent_minutes || 0
+      }
+    )
+  }
+  
+  // For regular updates, use update_quiz_session_progress
+  const { data, error } = await supabase.rpc('update_quiz_session_progress', {
+    p_session_id: sessionId,
+    p_total_questions: updates.total_questions || 0,
+    p_correct_answers: updates.correct_answers || 0
+  })
   
   if (error) {
     console.error('Error updating quiz session:', error)
     return null
   }
   
-  return data
+  return data[0] || null
 }
 
-// Complete a quiz session
+// Complete a quiz session using the SQL function
 export async function completeQuizSession(
   sessionId: string,
   finalResults: {
     total_questions: number;
     correct_answers: number;
-    time_spent_minutes: number;
+    time_spent_minutes?: number; // Made optional since the SQL function calculates it
   }
 ): Promise<QuizSession | null> {
-  return updateQuizSession(sessionId, {
-    ...finalResults,
-    completed_at: new Date().toISOString(),
-    is_completed: true
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase.rpc('complete_quiz_session', {
+    p_session_id: sessionId,
+    p_total_questions: finalResults.total_questions,
+    p_correct_answers: finalResults.correct_answers
   })
+  
+  if (error) {
+    console.error('Error completing quiz session:', error)
+    return null
+  }
+  
+  return data[0] || null
 }
 
 // Get user's quiz session history
@@ -303,27 +324,23 @@ export async function getCompletedSessionsForTarget(
   return data
 }
 
-// Get user's current active session (if any)
+// Get user's current active session (if any) using the SQL function
 export async function getActiveQuizSession(userId: string): Promise<QuizSession | null> {
   const supabase = await createClient()
   
-  const { data, error } = await supabase
-    .from('quiz_sessions')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_completed', false)
-    .order('started_at', { ascending: false })
-    .limit(1)
-    .single()
+  const { data, error } = await supabase.rpc('get_active_quiz_session', {
+    p_user_id: userId
+  })
   
-  if (error || !data) {
+  if (error) {
+    console.error('Error fetching active quiz session:', error)
     return null
   }
   
-  return data
+  return data[0] || null
 }
 
-// Calculate session statistics for a user
+// Calculate session statistics for a user using the SQL function
 export async function getUserSessionStats(userId: string): Promise<{
   total_sessions: number;
   completed_sessions: number;
@@ -334,12 +351,12 @@ export async function getUserSessionStats(userId: string): Promise<{
 }> {
   const supabase = await createClient()
   
-  const { data, error } = await supabase
-    .from('quiz_sessions')
-    .select('is_completed, total_questions, correct_answers, time_spent_minutes')
-    .eq('user_id', userId)
+  const { data, error } = await supabase.rpc('get_user_session_stats', {
+    p_user_id: userId
+  })
   
-  if (error || !data) {
+  if (error || !data || data.length === 0) {
+    console.error('Error fetching user session stats:', error)
     return {
       total_sessions: 0,
       completed_sessions: 0,
@@ -350,17 +367,15 @@ export async function getUserSessionStats(userId: string): Promise<{
     }
   }
   
-  const completed = data.filter(session => session.is_completed)
-  const total_questions = completed.reduce((sum, session) => sum + session.total_questions, 0)
-  const total_correct = completed.reduce((sum, session) => sum + session.correct_answers, 0)
+  const stats = data[0]
   
   return {
-    total_sessions: data.length,
-    completed_sessions: completed.length,
-    total_questions_answered: total_questions,
-    total_correct_answers: total_correct,
-    average_accuracy: total_questions > 0 ? (total_correct / total_questions) * 100 : 0,
-    total_time_spent: completed.reduce((sum, session) => sum + session.time_spent_minutes, 0)
+    total_sessions: Number(stats.total_sessions) || 0,
+    completed_sessions: Number(stats.completed_sessions) || 0,
+    total_questions_answered: Number(stats.total_questions_answered) || 0,
+    total_correct_answers: Number(stats.total_correct_answers) || 0,
+    average_accuracy: Number(stats.average_accuracy) || 0,
+    total_time_spent: Number(stats.total_time_spent_minutes) || 0
   }
 }
 
@@ -474,7 +489,7 @@ export async function getDetailedSkillStats(
     .select(`
       is_correct,
       time_spent_seconds,
-      difficulty_level,
+      difficulty,
       answered_at,
       quiz_sessions!inner(user_id)
     `)
@@ -501,7 +516,7 @@ export async function getDetailedSkillStats(
   // Difficulty breakdown
   const difficultyBreakdown: Record<number, { correct: number; total: number; accuracy: number }> = {}
   data.forEach(answer => {
-    const level = answer.difficulty_level
+    const level = answer.difficulty
     if (!difficultyBreakdown[level]) {
       difficultyBreakdown[level] = { correct: 0, total: 0, accuracy: 0 }
     }
@@ -610,89 +625,105 @@ export async function getQuestionById(questionId: string): Promise<Question | nu
   return data
 }
 
-// Get questions for practice session (avoiding ones user has answered)
+/**
+ * Unified function to fetch questions for any practice level using the PostgreSQL stored procedure
+ * 
+ * @param options Configuration options for question fetching
+ * @returns Array of Question objects
+ */
 export async function getQuestionsForPractice(
-  skillId: string,
-  difficultyLevel: number,
-  userId: string,
-  limit = 10
+  options: {
+    level?: 'all' | 'subject' | 'domain' | 'skill';
+    targetId?: string;
+    
+    // Filtering options
+    difficultyRange?: [number, number];
+    difficultyLevel?: number;
+    limit?: number;
+    excludeAnsweredQuestions?: boolean;
+    userId?: string;
+  } = {}
 ): Promise<Question[]> {
   const supabase = await createClient()
   
-  // Get questions user has already answered for this skill
-  const answeredQuestions = await getUserAnsweredQuestions(userId, skillId)
+  const {
+    level = 'all',
+    targetId,
+    difficultyRange = [1, 7],
+    difficultyLevel,
+    limit = 10,
+    excludeAnsweredQuestions = false,
+    userId
+  } = options
+
+  // Set the level and target ID
+  const effectiveLevel = level
+  const effectiveTargetId = targetId
   
-  let query = supabase
-    .from('questions')
-    .select('*')
-    .eq('skill_id', skillId)
-    .eq('difficulty_level', difficultyLevel)
-    .eq('is_active', true)
-    .order('random()')
-    .limit(limit)
-  
-  // Exclude questions user has already answered
-  if (answeredQuestions.length > 0) {
-    query = query.not('id', 'in', `(${answeredQuestions.join(',')})`)
+  // Get excluded question IDs if needed
+  let excludeIds: string[] = []
+  if (excludeAnsweredQuestions && userId) {
+    excludeIds = await getUserAnsweredQuestions(userId)
   }
   
-  const { data, error } = await query
-  
-  if (error) {
-    console.error('Error fetching practice questions:', error)
-    return []
+  // Use the PostgreSQL function for efficient random selection
+  try {
+    // Set difficulty parameters
+    const minDifficulty = difficultyLevel || difficultyRange[0]
+    const maxDifficulty = difficultyLevel || difficultyRange[1]
+    
+    // Call the PostgreSQL function
+    const { data, error } = await supabase
+      .rpc('get_random_practice_questions',
+      {
+        level_param: effectiveLevel,
+        target_id_param: effectiveTargetId || '',
+        min_difficulty: minDifficulty,
+        max_difficulty: maxDifficulty,
+        exclude_ids: excludeIds,
+        limit_param: limit
+      }
+    )
+    
+    // Debug logging
+    console.log(`getQuestionsForPractice - level: ${effectiveLevel}, targetId: ${effectiveTargetId}`)
+    console.log('getQuestionsForPractice - difficultyRange:', [minDifficulty, maxDifficulty])
+    console.log('getQuestionsForPractice - excludeIds count:', excludeIds.length)
+    console.log('getQuestionsForPractice - data count:', data?.length || 0)
+    
+    if (error) {
+      console.error('Error calling get_random_practice_questions:', error)
+      throw new Error(`Failed to fetch questions: ${error.message}`)
+    }
+    
+    return data || []
+  } catch (error) {
+    console.error('Exception in getQuestionsForPractice:', error)
+    throw error
   }
-  
-  return data || []
 }
 
-// Get questions by skill with flexible difficulty range
+/**
+ * @deprecated Use getQuestionsForPractice with level='skill' and targetId instead
+ * This function is maintained for backward compatibility
+ */
 export async function getQuestionsBySkill(
   skillId: string,
   options: {
     difficultyRange?: [number, number];
     excludeQuestionIds?: string[];
     limit?: number;
-    randomOrder?: boolean;
   } = {}
 ): Promise<Question[]> {
-  const {
-    difficultyRange = [1, 5],
-    excludeQuestionIds = [],
-    limit = 20,
-    randomOrder = true
-  } = options
-  
-  const supabase = await createClient()
-  
-  let query = supabase
-    .from('questions')
-    .select('*')
-    .eq('skill_id', skillId)
-    .eq('is_active', true)
-    .gte('difficulty_level', difficultyRange[0])
-    .lte('difficulty_level', difficultyRange[1])
-  
-  if (excludeQuestionIds.length > 0) {
-    query = query.not('id', 'in', `(${excludeQuestionIds.join(',')})`)
-  }
-  
-  if (randomOrder) {
-    query = query.order('random()')
-  } else {
-    query = query.order('created_at', { ascending: false })
-  }
-  
-  query = query.limit(limit)
-  
-  const { data, error } = await query
-  
-  if (error) {
-    console.error('Error fetching questions by skill:', error)
-    return []
-  }
-  
-  return data || []
+  return getQuestionsForPractice({
+    level: 'skill',
+    targetId: skillId,
+    difficultyRange: options.difficultyRange,
+    limit: options.limit,
+    // Convert excludeQuestionIds to the format expected by getQuestionsForPractice
+    excludeAnsweredQuestions: false,
+    userId: undefined
+  })
 }
 
 // Search questions by content
@@ -717,7 +748,7 @@ export async function searchQuestions(
     .textSearch('question_text', searchTerm)
   
   if (skillId) query = query.eq('skill_id', skillId)
-  if (difficultyLevel) query = query.eq('difficulty_level', difficultyLevel)
+  if (difficultyLevel) query = query.eq('difficulty', difficultyLevel)
   if (questionType) query = query.eq('question_type', questionType)
   if (originId) query = query.eq('origin_id', originId)
   
@@ -788,9 +819,9 @@ export async function importSATQuestion(satQuestion: {
     skill_id: skillId,
     sat_skill_code: satQuestion.skill_cd,
     sat_domain_code: satQuestion.primary_class_cd,
-    difficulty_level: difficultyLevel,
+    difficulty: difficultyLevel,
     sat_difficulty_letter: satQuestion.difficulty,
-    sat_score_band: satQuestion.score_band_range_cd || difficultyLevel,
+    difficulty_band: satQuestion.score_band_range_cd || difficultyLevel,
     answer_options: answerOptions,
     correct_answers: satQuestion.correct_answer,
     explanation: satQuestion.rationale,
@@ -813,7 +844,7 @@ export async function getQuestionStats(): Promise<{
   
   const { data, error } = await supabase
     .from('questions')
-    .select('origin_id, skill_id, difficulty_level, question_type')
+    .select('origin_id, skill_id, difficulty, question_type')
     .eq('is_active', true)
   
   if (error || !data) {
@@ -837,7 +868,7 @@ export async function getQuestionStats(): Promise<{
   data.forEach(q => {
     stats.by_origin[q.origin_id] = (stats.by_origin[q.origin_id] || 0) + 1
     stats.by_skill[q.skill_id] = (stats.by_skill[q.skill_id] || 0) + 1
-    stats.by_difficulty[q.difficulty_level] = (stats.by_difficulty[q.difficulty_level] || 0) + 1
+    stats.by_difficulty[q.difficulty] = (stats.by_difficulty[q.difficulty] || 0) + 1
     stats.by_type[q.question_type] = (stats.by_type[q.question_type] || 0) + 1
   })
   

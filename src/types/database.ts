@@ -116,12 +116,14 @@ export interface Question {
   stimulus: string | null;
   question_type: 'mcq' | 'grid_in' | 'free_response';
   skill_id: string;
+  domain_id: string; // New field for direct domain reference
+  subject_id: string; // New field for direct subject reference
   sat_skill_code: string | null;
   sat_domain_code: string | null;
   sat_program: string;
-  difficulty_level: number;
+  difficulty: number; // Changed from difficulty_level to match database schema
+  difficulty_band: number | null; // Renamed from sat_score_band for clarity
   sat_difficulty_letter: string | null;
-  sat_score_band: number | null;
   answer_options: AnswerOption[] | null;
   correct_answers: string[];
   explanation: string | null;
@@ -142,12 +144,14 @@ export interface QuestionInsert {
   stimulus?: string;
   question_type?: 'mcq' | 'grid_in' | 'free_response';
   skill_id: string;
+  domain_id?: string; // New field for direct domain reference
+  subject_id?: string; // New field for direct subject reference
   sat_skill_code?: string;
   sat_domain_code?: string;
   sat_program?: string;
-  difficulty_level: number;
+  difficulty: number; // Changed from difficulty_level to match database schema
   sat_difficulty_letter?: string;
-  sat_score_band?: number;
+  difficulty_band?: number; // Renamed from sat_score_band for clarity
   answer_options?: AnswerOption[];
   correct_answers: string[];
   explanation?: string;

@@ -45,6 +45,15 @@ body {
   font-family: var(--font-carlito), Arial, Helvetica, sans-serif;
 }
 
+table, th, td {
+  border: 1px solid var(--paynes-gray);
+  padding: 10px;
+}
+
+.sr-only {
+  display: none;
+}
+
 /* Custom button hover styles */
 .login-btn:hover {
   background-color: #49586710 !important;
