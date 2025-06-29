@@ -92,6 +92,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Function to get a specific quiz session by ID (with user validation)
+-- Returns the session if it belongs to the user and exists
+CREATE OR REPLACE FUNCTION get_quiz_session(
+  p_session_id UUID,
+  p_user_id UUID
+) RETURNS SETOF quiz_sessions AS $$
+BEGIN
+  RETURN QUERY
+  SELECT *
+  FROM quiz_sessions
+  WHERE id = p_session_id
+    AND user_id = p_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Function to get user's quiz session statistics
 -- Returns aggregated statistics about user's quiz sessions
 CREATE OR REPLACE FUNCTION get_user_session_stats(

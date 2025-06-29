@@ -4,7 +4,7 @@ import { QuizQuestion } from "@/components/quiz/quiz-interface-v2";
 import { notFound } from "next/navigation";
 import { getSubjectById, getSkillHierarchy, getDomainHierarchy } from "@/types/sat-structure";
 import { createClient } from '@/utils/supabase/server'
-import { getQuestionsForPractice, createQuizSession, validateQuizSession } from '@/utils/database'
+import { getQuestionsForPractice, createQuizSession } from '@/utils/database'
 import { Question } from '@/types/database'
 
 // Simple fallback questions when database fetch fails
@@ -126,10 +126,6 @@ interface PracticePageProps {
   params: {
     params?: string[];
   };
-  searchParams?: {
-    sessionId?: string;
-    [key: string]: string | undefined;
-  };
 }
 
 /**
@@ -144,9 +140,6 @@ export default async function PracticePage(props: PracticePageProps) {
   // This ensures we're not accessing dynamic params synchronously
   const resolvedProps = props;
   const routeParams = resolvedProps.params.params;
-  
-  // Check if we have an existing session ID in the URL
-  const existingSessionId = resolvedProps.searchParams?.sessionId;
   
   // Get user from session
   const supabase = await createClient();
@@ -189,7 +182,7 @@ export default async function PracticePage(props: PracticePageProps) {
     notFound();
   }
 
-  // Create quiz session for tracking if one doesn't already exist
+  // Create a fresh quiz session for this practice attempt
   let quizSession = null;
   try {
     // Determine session target based on level
@@ -197,33 +190,14 @@ export default async function PracticePage(props: PracticePageProps) {
                          level === 'domain' ? domainId : 
                          level === 'subject' ? subjectId : 'all';
     
-    if (existingSessionId) {
-      // Validate that the session belongs to the current user
-      const isValidSession = await validateQuizSession(existingSessionId, user.id);
-      
-      if (isValidSession) {
-        // Use the existing session from URL parameter
-        console.log('Using existing quiz session from URL:', existingSessionId);
-        quizSession = { id: existingSessionId };
-      } else {
-        // Session doesn't belong to this user or doesn't exist - create a new one
-        console.warn('Invalid session ID provided, creating new session');
-        quizSession = await createQuizSession({
-          user_id: user.id,
-          session_type: level as 'all' | 'subject' | 'domain' | 'skill',
-          target_id: sessionTarget
-        });
-      }
-    } else {
-      // Create a new session
-      quizSession = await createQuizSession({
-        user_id: user.id,
-        session_type: level as 'all' | 'subject' | 'domain' | 'skill',
-        target_id: sessionTarget
-      });
-    }
+    // Always create a new session for each practice page visit
+    quizSession = await createQuizSession({
+      user_id: user.id,
+      session_type: level as 'all' | 'subject' | 'domain' | 'skill',
+      target_id: sessionTarget
+    });
   } catch (error) {
-    console.error('Error handling quiz session:', error);
+    console.error('Error creating quiz session:', error);
     // Continue without session tracking if it fails
   }
 

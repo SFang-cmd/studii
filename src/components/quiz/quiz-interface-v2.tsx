@@ -36,8 +36,6 @@ export interface QuizInterfaceProps {
   sessionId?: string;
   userId?: string;
   sessionType?: 'skill' | 'domain' | 'subject' | 'overall';
-  level?: 'all' | 'subject' | 'domain' | 'skill';
-  target?: string;
 }
 
 export default function QuizInterface({
@@ -45,9 +43,7 @@ export default function QuizInterface({
   subjectTitle,
   sessionId,
   userId,
-  sessionType = 'overall',
-  level = 'all',
-  target = 'all'
+  sessionType = 'overall'
 }: QuizInterfaceProps): React.ReactNode {
   // Core quiz state
   const [currentSet, setCurrentSet] = useState(0);
@@ -129,7 +125,7 @@ export default function QuizInterface({
           correctAnswers: sessionStats.totalCorrect,
           timeSpentMinutes: Math.round(sessionStats.totalTimeSeconds / 60)
         });
-        navigator.sendBeacon('/api/complete-session', data);
+        navigator.sendBeacon('/api/complete-session-beacon', data);
       }
     };
     
@@ -158,8 +154,7 @@ export default function QuizInterface({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          level,
-          target,
+          sessionId, // Use session ID to determine question context
           excludedQuestionIds: Array.from(seenQuestionIds)
         })
       });
@@ -181,7 +176,7 @@ export default function QuizInterface({
     } finally {
       setIsLoadingNextSet(false);
     }
-  }, [level, target, seenQuestionIds]);
+  }, [sessionId, seenQuestionIds]);
 
   // Prefetch next set when approaching end of current set
   useEffect(() => {

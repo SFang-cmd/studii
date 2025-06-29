@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getQuestionsForPractice } from '@/utils/database';
+import { getQuestionsForPractice, getQuizSession } from '@/utils/database';
 import { getSubjectById, getSkillHierarchy, getDomainHierarchy } from "@/types/sat-structure";
 
 /**
@@ -18,14 +18,22 @@ export async function POST(request: NextRequest) {
     // Parse request body
     const body = await request.json();
     const {
-      level,
-      target,
+      sessionId,
       excludedQuestionIds = [] // Question IDs to exclude (already seen)
     } = body;
     
-    if (!level || !target) {
-      return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
+    if (!sessionId) {
+      return NextResponse.json({ error: 'Session ID is required' }, { status: 400 });
     }
+    
+    // Get session details to determine what type of questions to fetch
+    const session = await getQuizSession(sessionId, user.id);
+    if (!session) {
+      return NextResponse.json({ error: 'Invalid or expired session' }, { status: 400 });
+    }
+    
+    const level = session.session_type as 'all' | 'subject' | 'domain' | 'skill';
+    const target = session.target_id;
     
     // Determine context name and title based on level and target
     let contextName = '';

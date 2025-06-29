@@ -243,6 +243,23 @@ export async function validateQuizSession(sessionId: string, userId: string): Pr
   return true
 }
 
+// Get quiz session details by ID (for authenticated user) using SQL function
+export async function getQuizSession(sessionId: string, userId: string): Promise<QuizSession | null> {
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase.rpc('get_quiz_session', {
+    p_session_id: sessionId,
+    p_user_id: userId
+  })
+  
+  if (error) {
+    console.error('Error fetching quiz session:', error)
+    return null
+  }
+  
+  return data?.[0] || null
+}
+
 // Update an existing quiz session using the SQL function
 export async function updateQuizSession(
   sessionId: string, 
