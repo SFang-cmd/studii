@@ -1,32 +1,202 @@
 # Technical Insights from Studii SAT Prep App Development
 
-## Hybrid Architecture Challenges
+## Architecture Evolution and Lessons Learned
 
-### Next.js App Router and Pages Router Integration
-One of the most significant technical challenges was integrating components across Next.js App Router and Pages Router paradigms:
+### Database Design and Normalization Strategy
 
-1. **Server Component Incompatibility**
-   - Server components and server actions from App Router cannot be directly imported in Pages Router
-   - This created build errors when the QuizInterface-v2 component tried to use server actions
-   - Solution: Created API routes as an abstraction layer that works in both contexts
+**Challenge**: Balancing database normalization with query performance for real-time SAT scoring calculations.
 
-2. **Authentication Context Sharing**
-   - Supabase authentication works differently in server components vs. client components
-   - Server components use cookies via `next/headers` while client components use browser storage
-   - Solution: Implemented API endpoints that handle authentication server-side
+**Approach**: Implemented a skill-centric data model where skills are atomic units (200-800 SAT scale), with domains and subjects calculated dynamically. This avoided over-normalization while maintaining data integrity.
 
-3. **Data Fetching Strategy**
-   - App Router uses React Server Components for data fetching
-   - Pages Router requires client-side data fetching or getServerSideProps
-   - Solution: Centralized data access through API endpoints accessible from both paradigms
+**Key Decisions**:
+- User progress stored at skill level only (35+ skills per user)
+- Domain/subject scores calculated on-demand rather than stored
+- Auto-initialization at SAT minimum (200 points) for new skills
+- Weighted calculations using real SAT test percentages
 
-### Supabase Client Adaptation
-Managing Supabase clients across different rendering contexts required careful consideration:
+**Impact**: Reduced database complexity while enabling flexible scoring algorithms and real-time progress tracking.
 
-1. **Environment-Specific Clients**
-   - Server components need a server-side Supabase client with cookie handling
-   - Client components need a browser-based client with local storage
-   - Solution: Created separate client implementations with consistent interfaces
+### TypeScript Integration Challenges
+
+**Challenge**: Maintaining type safety across a complex full-stack application with dynamic data structures.
+
+**Technical Solutions**:
+- Created comprehensive database type definitions using Supabase's generated types
+- Implemented strict TypeScript mode with path aliases (`@/*` → `./src/*`)
+- Used discriminated unions for quiz question types and session states
+- Built type-safe database utility functions with proper error handling
+
+**Specific Issues Resolved**:
+- UUID vs number type mismatches in question IDs
+- Interface consistency between database models and frontend components
+- Proper typing for JSONB fields (answer_options, question metadata)
+
+### Next.js 15 Migration and Dynamic Routes
+
+**Challenge**: Upgrading to Next.js 15 while maintaining backward compatibility and implementing dynamic routes.
+
+**Technical Implementation**:
+- Migrated to async params pattern: `await params` for dynamic routes
+- Used `[[...params]]` catch-all routing for flexible practice URLs
+- Implemented SSR-compatible authentication with middleware-only auth
+
+**Performance Optimizations**:
+- Server-side rendering for SEO and initial load performance
+- Component lazy loading with organized index.ts files
+- On-demand score calculations instead of heavy enrichment objects
+
+### Session Management Architecture (Failed Attempt)
+
+**Initial Approach**: Complex session tracking with URL parameters, database persistence, and React cleanup functions.
+
+**Problems Encountered**:
+- Component re-renders triggered premature session completion
+- URL parameter handling created race conditions
+- SQL function parameter mismatches
+- Over-engineered persistence mechanisms interfered with React lifecycle
+
+**Lessons Learned**:
+- React cleanup functions should not handle business logic
+- URL state management adds unnecessary complexity
+- Simple solutions often outperform complex ones
+- Database design should prioritize debugging and maintenance
+
+**Solution**: Complete removal and planned reimplementation with page lifecycle management.
+
+### SAT API Integration and Data Mapping
+
+**Challenge**: Integrating with official SAT question bank API while maintaining data fidelity.
+
+**Technical Approach**:
+- Built comprehensive skill code mapping system (SAT codes → internal IDs)
+- Preserved SAT's native 1-7 difficulty scale for maximum fidelity
+- Implemented rich HTML support for complex question content (SVG, tables, equations)
+- Created origin tracking system for content management
+
+**Data Transformation Pipeline**:
+1. Fetch question metadata from SAT API
+2. Check for duplicates using external IDs
+3. Map SAT skill codes to internal skill structure
+4. Import with automatic type conversion and validation
+5. Store with database constraints for data integrity
+
+### Component State Management Strategy
+
+**Challenge**: Managing quiz state across multiple question sets without page refreshes.
+
+**SPA Architecture**:
+- Essential state only: current set, question index, selected answers
+- Dynamic question loading with prefetching
+- Minimal client state with server-side logic
+- Fallback question generation for testing
+
+**State Optimization**:
+- Eliminated redundant answer tracking mechanisms
+- Simplified component interfaces and prop passing
+- Removed complex useEffect chains and dependency management
+- Implemented seen question deduplication in memory
+
+### Database Query Optimization
+
+**Challenge**: Efficient question fetching with exclusion lists and difficulty filtering.
+
+**Solutions Implemented**:
+- PostgreSQL stored procedures for complex query logic
+- Parameterized queries with proper indexing
+- Question exclusion handling for practice continuity
+- Difficulty band filtering using native SAT scale
+
+**Performance Considerations**:
+- Query performance monitoring for large excluded question lists
+- Memory management for multiple loaded question sets
+- Graceful fallback when database queries fail
+
+### Authentication and Security
+
+**Implementation**: Supabase authentication with SSR support and middleware-only auth handling.
+
+**Security Measures**:
+- Row Level Security policies for all database tables
+- Server-side session validation
+- Protected route middleware
+- Secure cookie handling for authentication state
+
+**OAuth Integration**:
+- Google and Facebook OAuth with proper provider configuration
+- Template pattern for extensible OAuth providers
+- Error handling and user-friendly feedback
+
+### React Component Architecture
+
+**Design Principles**:
+- Grouped components by use-case (dashboard/, quiz/, shared/)
+- Single responsibility principle for component functions
+- Consistent prop interfaces with TypeScript
+- Separation of presentation and business logic
+
+**Performance Patterns**:
+- useCallback for expensive operations
+- Memoization for complex calculations
+- Efficient re-render patterns
+- Clean dependency arrays
+
+### Error Handling and Debugging Strategy
+
+**Approach**: Comprehensive error boundaries with graceful degradation.
+
+**Implementation**:
+- Try-catch blocks around all database operations
+- Fallback UI components for API failures
+- Detailed logging for debugging complex state transitions
+- User-friendly error messages with actionable guidance
+
+**Monitoring Strategy**:
+- Console logging for development debugging
+- Error tracking for production issues
+- Performance monitoring for query optimization
+
+### Deployment and DevOps Considerations
+
+**Technology Stack**:
+- Next.js 15 with Turbopack for development
+- Supabase for backend services and database
+- Vercel for hosting and deployment
+- ESLint and TypeScript for code quality
+
+**Development Workflow**:
+- Hot reloading with Turbopack for fast development cycles
+- Type checking integrated into build process
+- Git workflow with descriptive commit messages
+- Documentation-driven development approach
+
+### Scalability and Future Architecture
+
+**Current Limitations**:
+- No caching layer for calculated scores
+- Client-side only session state management
+- Single database instance without sharding
+
+**Planned Improvements**:
+- Redis caching for frequent score calculations
+- Background job processing for data updates
+- CDN integration for static content delivery
+- Microservices architecture for specific domains
+
+### Testing Strategy and Quality Assurance
+
+**Current State**: Manual testing with fallback question generation for development.
+
+**Planned Testing Infrastructure**:
+- Unit tests for utility functions and calculations
+- Integration tests for API endpoints
+- End-to-end tests for critical user flows
+- Performance testing for database queries
+
+**Quality Metrics**:
+- TypeScript strict mode compliance
+- ESLint rule adherence
+- Component interface consistency
+- Database query performance monitoring
 
 2. **Error Handling Across Boundaries**
    - Server errors need to be properly serialized when crossing to the client
