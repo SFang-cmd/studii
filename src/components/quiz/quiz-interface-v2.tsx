@@ -131,10 +131,11 @@ export default function QuizInterface({
     
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
+      // Only remove the event listener on cleanup
+      // Session completion should only happen via beforeunload
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      completeSession();
     };
-  }, [sessionId, sessionStats, completeSession]);
+  }, [sessionId, sessionStats]);
 
 
 

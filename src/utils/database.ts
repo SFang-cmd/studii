@@ -334,13 +334,12 @@ export async function completeQuizSession(
   const completedAt = new Date();
   const timeSpentMinutes = Math.round((completedAt.getTime() - startedAt.getTime()) / (1000 * 60));
 
-  // Update the session with completion data
+  // Update the session with completion data using SQL function
+  // The SQL function automatically calculates time_spent_minutes
   const { data, error } = await supabase.rpc('complete_quiz_session', {
     p_session_id: sessionId,
     p_total_questions: finalResults.total_questions,
-    p_correct_answers: finalResults.correct_answers,
-    // Use the calculated time spent minutes
-    p_time_spent_minutes: timeSpentMinutes
+    p_correct_answers: finalResults.correct_answers
   });
 
   if (error) {

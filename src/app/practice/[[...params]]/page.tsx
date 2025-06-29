@@ -123,9 +123,9 @@ async function fetchQuestionsForLevel(
  * Props for the PracticePage component
  */
 interface PracticePageProps {
-  params: {
+  params: Promise<{
     params?: string[];
-  };
+  }>;
 }
 
 /**
@@ -136,10 +136,9 @@ interface PracticePageProps {
  * - /practice/[subject]/[domain]/[skill] (skill-specific practice)
  */
 export default async function PracticePage(props: PracticePageProps) {
-  // Fix Next.js warnings by using the recommended approach
-  // This ensures we're not accessing dynamic params synchronously
-  const resolvedProps = props;
-  const routeParams = resolvedProps.params.params;
+  // Await params as required by Next.js 15
+  const resolvedParams = await props.params;
+  const routeParams = resolvedParams.params;
   
   // Get user from session
   const supabase = await createClient();
