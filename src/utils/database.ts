@@ -218,6 +218,31 @@ export async function createQuizSession(sessionData: QuizSessionInsert): Promise
   return data[0] || null
 }
 
+// Validate that a quiz session belongs to a specific user and is not completed
+export async function validateQuizSession(sessionId: string, userId: string): Promise<boolean> {
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase
+    .from('quiz_sessions')
+    .select('id, is_completed')
+    .eq('id', sessionId)
+    .eq('user_id', userId)
+    .single()
+  
+  if (error || !data) {
+    console.warn('Session validation failed:', error)
+    return false
+  }
+  
+  // Also check if the session is already completed
+  if (data.is_completed) {
+    console.warn('Session is already marked as completed, cannot reuse')
+    return false
+  }
+  
+  return true
+}
+
 // Update an existing quiz session using the SQL function
 export async function updateQuizSession(
   sessionId: string, 
@@ -258,70 +283,56 @@ export async function completeQuizSession(
   finalResults: {
     total_questions: number;
     correct_answers: number;
-    time_spent_minutes?: number; // Made optional since the SQL function calculates it
+    time_spent_minutes?: number;
   }
 ): Promise<QuizSession | null> {
-  const supabase = await createClient()
-  
+  const supabase = await createClient();
+
+  console.log(`[DEBUG] Completing session ${sessionId} with:`, {
+    questions: finalResults.total_questions,
+    correct: finalResults.correct_answers,
+    stack: new Error().stack,
+  });
+
+  // First check if the session is already completed
+  const { data: sessionData, error: sessionError } = await supabase
+    .from('quiz_sessions')
+    .select('*')
+    .eq('id', sessionId)
+    .single();
+
+  if (sessionError || !sessionData) {
+    console.error('Error fetching session for completion:', sessionError);
+    return null;
+  }
+
+  // If the session is already completed, don't complete it again
+  if (sessionData.is_completed) {
+    console.log(`[DEBUG] Session ${sessionId} is already completed, skipping completion`);
+    return sessionData as QuizSession;
+  }
+
+  // Calculate time spent in minutes
+  const startedAt = new Date(sessionData.started_at);
+  const completedAt = new Date();
+  const timeSpentMinutes = Math.round((completedAt.getTime() - startedAt.getTime()) / (1000 * 60));
+
+  // Update the session with completion data
   const { data, error } = await supabase.rpc('complete_quiz_session', {
     p_session_id: sessionId,
     p_total_questions: finalResults.total_questions,
-    p_correct_answers: finalResults.correct_answers
-  })
-  
-  if (error) {
-    console.error('Error completing quiz session:', error)
-    return null
-  }
-  
-  return data[0] || null
-}
+    p_correct_answers: finalResults.correct_answers,
+    // Use the calculated time spent minutes
+    p_time_spent_minutes: timeSpentMinutes
+  });
 
-// Get user's quiz session history
-export async function getUserQuizSessions(
-  userId: string,
-  limit = 20
-): Promise<QuizSession[]> {
-  const supabase = await createClient()
-  
-  const { data, error } = await supabase
-    .from('quiz_sessions')
-    .select('*')
-    .eq('user_id', userId)
-    .order('started_at', { ascending: false })
-    .limit(limit)
-  
   if (error) {
-    console.error('Error fetching user quiz sessions:', error)
-    return []
+    console.error('Error completing quiz session:', error);
+    return null;
   }
-  
-  return data
-}
 
-// Get completed quiz sessions for a specific target (subject/domain/skill)
-export async function getCompletedSessionsForTarget(
-  userId: string,
-  sessionType: 'subject' | 'domain' | 'skill',
-  targetId: string
-): Promise<QuizSession[]> {
-  const supabase = await createClient()
-  
-  const { data, error } = await supabase
-    .from('quiz_sessions')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('session_type', sessionType)
-    .eq('target_id', targetId)
-    .eq('is_completed', true)
-    .order('completed_at', { ascending: false })
-  
-  if (error) {
-    console.error('Error fetching completed sessions for target:', error)
-    return []
-  }
-  
-  return data
+  console.log(`[DEBUG] Session ${sessionId} completed successfully:`, data[0]);
+  return data[0] || null;
 }
 
 // Get user's current active session (if any) using the SQL function
@@ -385,18 +396,25 @@ export async function getUserSessionStats(userId: string): Promise<{
 export async function recordUserAnswer(answerData: UserSessionAnswerInsert): Promise<UserSessionAnswer | null> {
   const supabase = await createClient()
   
-  const { data, error } = await supabase
-    .from('user_session_answers')
-    .insert(answerData)
-    .select()
-    .single()
+  console.log('Recording answer with data:', answerData)
   
-  if (error) {
-    console.error('Error recording user answer:', error)
+  try {
+    const { data, error } = await supabase
+      .from('user_session_answers')
+      .insert(answerData)
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Error recording user answer:', error)
+      return null
+    }
+    
+    return data
+  } catch (err) {
+    console.error('Exception recording user answer:', err)
     return null
   }
-  
-  return data
 }
 
 // Get all answers for a specific session
@@ -642,6 +660,7 @@ export async function getQuestionsForPractice(
     limit?: number;
     excludeAnsweredQuestions?: boolean;
     userId?: string;
+    excludeQuestionIds?: (string | number)[]; // Additional question IDs to exclude
   } = {}
 ): Promise<Question[]> {
   const supabase = await createClient()
@@ -653,7 +672,8 @@ export async function getQuestionsForPractice(
     difficultyLevel,
     limit = 10,
     excludeAnsweredQuestions = false,
-    userId
+    userId,
+    excludeQuestionIds = []
   } = options
 
   // Set the level and target ID
@@ -662,8 +682,17 @@ export async function getQuestionsForPractice(
   
   // Get excluded question IDs if needed
   let excludeIds: string[] = []
+  
+  // Add explicitly excluded question IDs
+  if (excludeQuestionIds.length > 0) {
+    // Convert all IDs to strings
+    excludeIds = excludeQuestionIds.map(id => String(id))
+  }
+  
+  // Add user's previously answered questions if requested
   if (excludeAnsweredQuestions && userId) {
-    excludeIds = await getUserAnsweredQuestions(userId)
+    const answeredQuestions = await getUserAnsweredQuestions(userId)
+    excludeIds = [...excludeIds, ...answeredQuestions]
   }
   
   // Use the PostgreSQL function for efficient random selection

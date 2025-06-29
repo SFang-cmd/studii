@@ -8,6 +8,7 @@ import { AnswerExplanation } from './answer-explanation';
 import { QuizSummary } from './quiz-summary';
 import { calculatePointsForQuestion, RankPointChanges, updateUserSkillScoresInDatabase } from '@/utils/rank-points';
 import { UserProgress } from '@/types/user-progress';
+import { recordUserAnswer } from '@/utils/database';
 
 export interface QuizOption {
   id: string;
@@ -24,10 +25,9 @@ export interface QuizQuestion {
   correctAnswer: string;
   explanation: string;
   category?: string;
-  difficulty?: number;
-  // Add difficultyBand to match the database schema
+  // Primary difficulty value (numeric 1-7 scale)
   difficultyBand?: number;
-  // Add difficultyLetter for descriptive difficulty
+  // Descriptive difficulty (E/M/H)
   difficultyLetter?: string;
   skillId?: string;
   // Additional properties for dynamic scorecards
@@ -43,11 +43,14 @@ interface QuizInterfaceProps {
   sessionId?: string;
   userId?: string;
   sessionType?: 'skill' | 'domain' | 'subject' | 'overall';
+  // For dynamic question fetching
+  level?: 'all' | 'subject' | 'domain' | 'skill';
+  target?: string;
 }
 
 type QuizState = 'question' | 'explanation' | 'summary';
 
-export function QuizInterface({ questions, subjectTitle, sessionId, userId, sessionType = 'overall' }: QuizInterfaceProps) {
+export function QuizInterface({ questions: initialQuestions, subjectTitle, sessionId, userId, sessionType = 'overall', level = 'all', target = 'all' }: QuizInterfaceProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
   const [quizState, setQuizState] = useState<QuizState>('question');
@@ -55,6 +58,12 @@ export function QuizInterface({ questions, subjectTitle, sessionId, userId, sess
   const questionStartTime = useRef<number>(Date.now());
   const [totalQuestionsAnswered, setTotalQuestionsAnswered] = useState(0);
   const [correctAnswersCount, setCorrectAnswersCount] = useState(0);
+  
+  // State for dynamic question sets
+  const [allQuestionSets, setAllQuestionSets] = useState<QuizQuestion[][]>([initialQuestions]);
+  const [seenQuestionIds, setSeenQuestionIds] = useState<(string | number)[]>([]);
+  const [isLoadingNextSet, setIsLoadingNextSet] = useState(false);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
   
   // Rank points tracking
   const [skillPoints, setSkillPoints] = useState<Record<string, number>>({});
@@ -68,12 +77,13 @@ export function QuizInterface({ questions, subjectTitle, sessionId, userId, sess
   const completeQuizSession = useCallback(async () => {
     if (sessionId) {
       try {
-        // Always complete the session, even if no questions were answered
-        // The SQL function will calculate time spent automatically
+        // Only complete the session when the user is truly exiting the quiz
+        // by explicitly forcing completion
         const result = await completeQuizSessionAction(
           sessionId,
           totalQuestionsAnswered || 0,  // Ensure we have at least 0
-          correctAnswersCount || 0      // Ensure we have at least 0
+          correctAnswersCount || 0,     // Ensure we have at least 0
+          true                         // Force completion since this is a true exit
         );
         console.log('Quiz session completed successfully:', result);
         return result;
@@ -96,11 +106,15 @@ export function QuizInterface({ questions, subjectTitle, sessionId, userId, sess
         const sessionData = JSON.stringify({
           sessionId,
           totalQuestions: totalQuestionsAnswered || 0,  // Ensure we have at least 0
-          correctAnswers: correctAnswersCount || 0      // Ensure we have at least 0
+          correctAnswers: correctAnswersCount || 0,     // Ensure we have at least 0
+          isRealExit: true                             // Flag to indicate this is a true exit
         });
         
         // Use navigator.sendBeacon which is designed for this purpose
         navigator.sendBeacon('/api/complete-session-beacon', sessionData);
+        
+        // Log that we're completing the session via beacon
+        console.log(`Sending beacon to complete session ${sessionId} on page unload`);
       }
       
       // 2. Update skill points in the database
@@ -213,32 +227,33 @@ export function QuizInterface({ questions, subjectTitle, sessionId, userId, sess
     fetchUserProgress();
   }, [userId]);
 
-  const questionsPerSet = 10;
-  const totalSets = Math.ceil(questions.length / questionsPerSet);
-  const currentSetQuestions = questions.slice(
-    currentSet * questionsPerSet,
-    (currentSet + 1) * questionsPerSet
-  );
-  const currentQuestion = currentSetQuestions[currentQuestionIndex];
-  const answeredQuestions = new Set(
-    currentSetQuestions
+  // Get the questions for the current set
+  const currentQuestions = allQuestionSets[currentSet] || [];
+  const currentQuestion = currentQuestions[currentQuestionIndex];
+  
+  // Check if we're at the end of the current set
+  const isLastQuestionInSet = currentQuestionIndex === currentQuestions.length - 1;
+  
+  // Track answered questions in current set
+  const answeredQuestionsSet = new Set(
+    currentQuestions
       .map((_, index) => index)
-      .filter(index => selectedAnswers[currentSetQuestions[index].id])
+      .filter(index => selectedAnswers[currentQuestions[index].id])
   );
   
   // Track incorrect answers
   const incorrectAnswers = new Set(
-    currentSetQuestions
+    currentQuestions
       .map((_, index) => index)
       .filter(index => {
-        const question = currentSetQuestions[index];
+        const question = currentQuestions[index];
         const selectedAnswer = selectedAnswers[question.id];
         return selectedAnswer && selectedAnswer !== question.correctAnswer;
       })
   );
 
   // Check if all questions in current set are completed
-  const allQuestionsCompleted = currentSetQuestions.every(q => selectedAnswers[q.id]);
+  const allQuestionsCompleted = currentQuestions.every(q => selectedAnswers[q.id]);
 
   const handleAnswerSelect = (questionId: number | string, answerId: string) => {
     setSelectedAnswers(prev => ({
@@ -257,10 +272,10 @@ export function QuizInterface({ questions, subjectTitle, sessionId, userId, sess
         setCorrectAnswersCount(prev => prev + 1);
       }
       
-      // Calculate rank points based on difficulty and correctness
+      // Calculate rank points based on difficulty band and correctness
       if (currentQuestion.skillId) {
-        const difficulty = currentQuestion.difficulty || 4; // Default to medium difficulty if not specified
-        const pointChange = calculatePointsForQuestion(difficulty, isCorrect);
+        const difficultyBand = currentQuestion.difficultyBand || 4; // Default to medium difficulty if not specified
+        const pointChange = calculatePointsForQuestion(difficultyBand, isCorrect);
         
         // Update skill points tracking
         setSkillPoints(prev => ({
@@ -268,7 +283,7 @@ export function QuizInterface({ questions, subjectTitle, sessionId, userId, sess
           [currentQuestion.skillId!]: (prev[currentQuestion.skillId!] || 0) + pointChange
         }));
         
-        console.log(`Skill ${currentQuestion.skillId}: ${pointChange > 0 ? '+' : ''}${pointChange} points (difficulty: ${difficulty})`);
+        console.log(`Skill ${currentQuestion.skillId}: ${pointChange > 0 ? '+' : ''}${pointChange} points (difficultyBand: ${difficultyBand})`);
       }
       
       // Record answer in database if we have session info
@@ -281,14 +296,14 @@ export function QuizInterface({ questions, subjectTitle, sessionId, userId, sess
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               sessionId,
-              questionId: currentQuestion.id,
+              questionId: String(currentQuestion.id), // Ensure question ID is a string
               skillId: currentQuestion.skillId,
-              difficultyLevel: currentQuestion.difficulty || 4,
+              difficultyLevel: currentQuestion.difficultyBand || 4,
               userAnswer: selectedAnswers[currentQuestion.id],
               correctAnswer: currentQuestion.correctAnswer,
               isCorrect,
               timeSpentSeconds: timeSpent,
-              pointChange: calculatePointsForQuestion(currentQuestion.difficulty || 4, isCorrect)
+              pointChange: calculatePointsForQuestion(currentQuestion.difficultyBand || 4, isCorrect)
             })
           });
         } catch (error) {
@@ -305,12 +320,12 @@ export function QuizInterface({ questions, subjectTitle, sessionId, userId, sess
     // Reset timer for next question
     questionStartTime.current = Date.now();
     
-    if (currentQuestionIndex < currentSetQuestions.length - 1) {
+    if (currentQuestionIndex < currentQuestions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
       setQuizState('question');
     } else {
       // End of current set
-      if (currentSet < totalSets - 1) {
+      if (currentSet < allQuestionSets.length - 1) {
         setQuizState('summary');
       } else {
         // End of all questions
@@ -319,30 +334,80 @@ export function QuizInterface({ questions, subjectTitle, sessionId, userId, sess
     }
   };
 
+  // Fetch more questions for the next set
+  const fetchMoreQuestions = async () => {
+    setIsLoadingNextSet(true);
+    setLoadingError(null);
+    
+    try {
+      // Collect all question IDs we've seen so far to exclude them
+      const allSeenIds = [...seenQuestionIds];
+      
+      const response = await fetch('/api/fetch-more-questions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          level,
+          target,
+          excludedQuestionIds: allSeenIds
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch more questions: ${response.status}`);
+      return false;
+    }
+  } catch (error) {
+    console.error('Error fetching more questions:', error);
+    setLoadingError(error instanceof Error ? error.message : 'Failed to load more questions');
+    return false;
+  } finally {
+    setIsLoadingNextSet(false);
+
   const handleNextSet = async () => {
-    if (currentSet < totalSets - 1) {
-      // Update session progress before moving to next set
-      if (sessionId) {
-        try {
-          await updateQuizSessionProgress(
-            sessionId,
-            totalQuestionsAnswered,
-            correctAnswersCount
-          );
-          console.log('Session progress updated before moving to next set');
-        } catch (error) {
-          console.error('Error updating session before next set:', error);
+    // Update session progress before moving to next set
+    if (sessionId) {
+      try {
+        await updateQuizSessionProgress(
+          sessionId,
+          totalQuestionsAnswered,
+          correctAnswersCount
+        );
+        console.log('Session progress updated before moving to next set');
+      } catch (error) {
+        console.error('Error updating session before next set:', error);
+      }
+      
+      // Try to fetch the next set of questions if we don't have them yet
+      if (!allQuestionSets[currentSet + 1]) {
+        const success = await fetchMoreQuestions();
+        if (!success) {
+          console.warn('Could not fetch more questions, but continuing with transition');
         }
       }
       
-      // Move to next set
+      // Handle transition client-side
       setCurrentSet(prev => prev + 1);
       setCurrentQuestionIndex(0);
       setQuizState('question');
+      hasProcessedSummary.current = false; // Reset the summary processing flag
       
-      // Note: We don't reset totalQuestionsAnswered or correctAnswersCount
-      // This allows us to maintain cumulative tracking across sets
+      // Update URL with session ID without causing a page reload
+      const url = new URL(window.location.href);
+      url.searchParams.set('sessionId', sessionId);
+      window.history.pushState({}, '', url.toString());
+    } else {
+      // If no session ID, just update the state (fallback behavior)
+      setCurrentSet(prev => prev + 1);
+      setCurrentQuestionIndex(0);
+      setQuizState('question');
+      hasProcessedSummary.current = false; // Reset the summary processing flag
     }
+    
+    // Note: We don't reset totalQuestionsAnswered or correctAnswersCount
+    // This allows us to maintain cumulative tracking across sets
   };
 
   const handleQuestionClick = (questionIndex: number) => {
@@ -434,23 +499,16 @@ export function QuizInterface({ questions, subjectTitle, sessionId, userId, sess
       <QuizSummary 
         questions={currentSetQuestions}
         currentSet={currentSet}
-        totalSets={totalSets}
         selectedAnswers={selectedAnswers}
         onNextSet={handleNextSet}
-        onTryAgain={() => {
-          completeQuizSession().then(() => window.location.reload());
-        }}
-        isFinalSet={currentSet >= totalSets - 1}
         quizType={sessionType as 'skill' | 'domain' | 'subject' | 'overall'}
         userProgress={userProgress || undefined}
         pointChanges={pointChanges}
         onUpdateProgress={(updatedProgress, newPointChanges) => {
           setUserProgress(updatedProgress);
           setPointChanges(newPointChanges);
-          
-          // If this is the final set, update the database with the new skill scores
-          if (currentSet >= totalSets - 1 && userId && !hasProcessedSummary.current) {
-            hasProcessedSummary.current = true;
+          // Update the database with the new skill scores
+          if (userId) {
             // Pass only the skillScores object which is a Record<string, number>
             updateUserSkillScoresInDatabase(userId, updatedProgress.skillScores)
               .then(() => console.log('Successfully updated user skill scores in database'))

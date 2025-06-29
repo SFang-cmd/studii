@@ -1,6 +1,6 @@
 # Development Notes - Studii SAT Prep Application
 
-## Current Status: Phase 4 Database Integration (In Progress - Mostly Complete)
+## Current Status: Phase 5 Supabase Integration and Hybrid Architecture (In Progress)
 
 ### Phase History Overview
 
@@ -17,6 +17,42 @@
 - 5/6 database schemas implemented (score_cache skipped)
 - Database integration mostly complete with refactored question fetching
 - Real database integration replacing dummy data
+- Quiz session handling refactored for continuous quiz flow
+
+### Recent Updates
+
+#### Supabase Integration and Hybrid Architecture
+- Resolved compatibility issues between Next.js App Router and Pages Router
+- Refactored QuizInterface-v2 component to use API routes instead of server actions
+- Created API endpoints for session updates and completion
+- Implemented proper time tracking for quiz sessions
+- Fixed build errors related to server-only imports in client components
+
+#### Quiz Session Management Refactoring
+- Implemented continuous quiz flow with sets of 10 questions
+- Removed concept of "final sets" to enable seamless progression
+- Added session ID validation to ensure security
+- Session continuity maintained via URL parameters
+- Added server-side validation to prevent session hijacking
+
+#### Session Completion
+- Added session completion via navigator.sendBeacon to ensure sessions are completed even when users navigate away
+- Created a dedicated API endpoint for beacon requests
+- Removed browser warning dialogs when navigating away
+
+#### Secure Session Continuity
+- Implemented continuous quiz flow with sets of 10 questions, removing the concept of "final sets"
+- Session ID is passed via URL parameters to maintain state across page reloads
+- Added server-side validation to ensure session IDs can only be used by their authenticated owners
+- This approach prevents session hijacking while maintaining simplicity
+
+#### Security Considerations
+- Explored storing session IDs in HTTP-only secure cookies as an alternative to URL parameters
+- URL parameters have visibility risks (browser history, sharing, referrer headers)
+- Server-side validation mitigates these risks by ensuring only legitimate owners can use session IDs
+- Opted for URL parameters with validation as the simpler solution for now
+- May revisit cookie-based storage when Next.js APIs stabilize
+- Documented alternative approaches for future reference
 
 ---
 
@@ -650,6 +686,31 @@ Implemented a dynamic skill rank points tracking system that calculates and upda
 
 ---
 
+## Supabase Integration and Hybrid Architecture (June 2025)
+
+### Issue Fixed
+The application needed to support both Next.js App Router (server components) and Pages Router (client components) while maintaining consistent Supabase authentication and database access.
+
+### Root Cause
+The QuizInterface-v2 component was importing server actions directly from the App Router, causing build errors when used in Pages Router contexts. Server actions rely on App Router features that are incompatible with Pages Router.
+
+### Implementation Details
+1. Created API routes (`/api/update-session` and `/api/complete-session`) as alternatives to server actions
+2. Refactored QuizInterface-v2 to use fetch API calls to these endpoints instead of direct server action imports
+3. Implemented proper time tracking with the `timeSpentMinutes` variable
+4. Fixed JSON payload formatting in fetch calls
+5. Added proper error handling for API requests
+
+### Components Modified
+- `QuizInterface-v2`: Updated to use fetch API calls instead of server actions
+- Added API routes for session management compatible with both routing paradigms
+
+### TODOs for Supabase Integration
+1. Consider implementing an adaptive Supabase client for broader compatibility
+2. Add more comprehensive error handling for API failures
+3. Implement retry logic for failed API calls
+4. Add offline support with request queuing
+
 ## HTML Rendering Implementation (June 2025)
 
 ### Issue Fixed
@@ -679,6 +740,49 @@ The main issue was in the data mapping from database to frontend. In the practic
 2. Consider adding a markdown parser for simpler content entry
 3. Test with more complex SVG and table content
 4. Add more comprehensive styling for other HTML elements (blockquotes, code blocks, etc.)
+
+## Hybrid Architecture Implementation Notes
+
+### App Router vs Pages Router
+```typescript
+// App Router (Server Components)
+// src/app/api/update-session/route.ts
+import { createClient } from '@/utils/supabase/server'
+
+export async function POST(request: Request) {
+  const supabase = await createClient()
+  const { sessionId, totalQuestions, correctAnswers } = await request.json()
+  
+  // Server-side operations with Supabase
+  const { data, error } = await supabase
+    .from('quiz_sessions')
+    .update({ /* ... */ })
+    .eq('id', sessionId)
+    .select()
+  
+  return Response.json({ success: true, data })
+}
+
+// Pages Router (Client Components)
+// src/components/quiz/quiz-interface-v2.tsx
+const updateSessionProgress = async () => {
+  try {
+    const response = await fetch('/api/update-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId,
+        totalQuestions: totalQuestionsAnswered,
+        correctAnswers: correctAnswersCount
+      })
+    })
+    const result = await response.json()
+    console.log('Session progress updated:', result)
+  } catch (error) {
+    console.error('Error updating session progress:', error)
+  }
+}
+```
 
 ## Technical Implementation Notes
 

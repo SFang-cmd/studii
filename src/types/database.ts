@@ -34,7 +34,7 @@ export interface UserSkillProgressUpdate {
 export interface QuizSession {
   id: string;
   user_id: string;
-  session_type: 'subject' | 'domain' | 'skill';
+  session_type: 'all' | 'subject' | 'domain' | 'skill';
   target_id: string;
   started_at: string;
   completed_at: string | null;
@@ -48,7 +48,7 @@ export interface QuizSession {
 
 export interface QuizSessionInsert {
   user_id: string;
-  session_type: 'subject' | 'domain' | 'skill';
+  session_type: 'all' | 'subject' | 'domain' | 'skill';
   target_id: string;
   started_at?: string;
   total_questions?: number;
@@ -109,31 +109,24 @@ export interface AnswerOption {
 
 export interface Question {
   id: string;
-  origin_id: string;
-  external_id: string | null;
-  source_question_id: string | null;
+  origin: string;
   question_text: string;
   stimulus: string | null;
-  question_type: 'mcq' | 'grid_in' | 'free_response';
+  question_type: string; // 'mcq' | 'grid_in' | 'free_response'
   skill_id: string;
-  domain_id: string; // New field for direct domain reference
-  subject_id: string; // New field for direct subject reference
-  sat_skill_code: string | null;
-  sat_domain_code: string | null;
-  sat_program: string;
-  difficulty: number; // Changed from difficulty_level to match database schema
-  difficulty_band: number | null; // Renamed from sat_score_band for clarity
-  sat_difficulty_letter: string | null;
+  domain_id: string;
+  subject_id: string;
+  sat_program: string | null;
+  difficulty_band: number | null;
+  difficulty_letter: string | null;
   answer_options: AnswerOption[] | null;
   correct_answers: string[];
   explanation: string | null;
-  est_time_seconds: number;
+  est_time_seconds: number | null;
   tags: string[];
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  sat_create_date: number | null;
-  sat_update_date: number | null;
 }
 
 export interface QuestionInsert {

@@ -1,5 +1,38 @@
 # Technical Insights from Studii SAT Prep App Development
 
+## Hybrid Architecture Challenges
+
+### Next.js App Router and Pages Router Integration
+One of the most significant technical challenges was integrating components across Next.js App Router and Pages Router paradigms:
+
+1. **Server Component Incompatibility**
+   - Server components and server actions from App Router cannot be directly imported in Pages Router
+   - This created build errors when the QuizInterface-v2 component tried to use server actions
+   - Solution: Created API routes as an abstraction layer that works in both contexts
+
+2. **Authentication Context Sharing**
+   - Supabase authentication works differently in server components vs. client components
+   - Server components use cookies via `next/headers` while client components use browser storage
+   - Solution: Implemented API endpoints that handle authentication server-side
+
+3. **Data Fetching Strategy**
+   - App Router uses React Server Components for data fetching
+   - Pages Router requires client-side data fetching or getServerSideProps
+   - Solution: Centralized data access through API endpoints accessible from both paradigms
+
+### Supabase Client Adaptation
+Managing Supabase clients across different rendering contexts required careful consideration:
+
+1. **Environment-Specific Clients**
+   - Server components need a server-side Supabase client with cookie handling
+   - Client components need a browser-based client with local storage
+   - Solution: Created separate client implementations with consistent interfaces
+
+2. **Error Handling Across Boundaries**
+   - Server errors need to be properly serialized when crossing to the client
+   - Client errors need appropriate fallbacks when server communication fails
+   - Solution: Standardized error response format and implemented graceful degradation
+
 ## Architecture and Design Patterns
 
 ### Client-Server Responsibility Separation
@@ -18,6 +51,24 @@ This pattern provides the best of both worlds: SEO-friendly content with server 
 Moving time tracking logic from the client to PostgreSQL functions revealed several advantages:
 - Consistent timestamps regardless of client-side clock accuracy
 - Reliable session duration calculations even with network interruptions
+
+### Secure Session Continuity
+Implementing a secure session management system for continuous quiz flow presented several interesting challenges:
+
+1. **State Persistence Across Page Reloads**
+   - Using URL parameters to maintain session state provides a simple yet effective solution
+   - This approach avoids the complexity of client-side state management libraries
+   - Enables seamless continuation of quiz sessions even after page refreshes
+
+2. **Security Considerations in Session Handling**
+   - Server-side validation ensures session IDs can only be used by their rightful owners
+   - This prevents session hijacking even if session IDs are exposed in URLs
+   - The tradeoff between security and simplicity is managed through validation rather than complex encryption
+
+3. **Hybrid Security Model**
+   - Leveraging server components for security-critical operations like session validation
+   - Using client components for interactive UI elements and navigation
+   - This separation of concerns aligns with security best practices while maintaining good UX
 - Simplified client code by removing time calculation responsibilities
 
 ### Graceful Session Completion
@@ -29,6 +80,24 @@ Implementing multiple layers of session completion protection taught me the impo
 This approach ensures data integrity even in unpredictable browser environments.
 
 ## React and Next.js Patterns
+
+### Server Actions vs. API Routes
+The project revealed important insights about when to use each approach:
+
+1. **Server Actions**
+   - Pros: Tightly integrated with React Server Components, reduced client-server code
+   - Cons: Only work in App Router, cannot be imported in client components or Pages Router
+   - Best for: Server-only operations in App Router contexts
+
+2. **API Routes**
+   - Pros: Universal compatibility across App Router and Pages Router
+   - Cons: More boilerplate, separate from component code
+   - Best for: Operations that need to work across routing paradigms
+
+3. **Hybrid Approach**
+   - Server actions can internally call API routes when needed
+   - API routes can use the same database utility functions as server actions
+   - This creates a flexible architecture that works in all contexts
 
 ### State Management Optimization
 The quiz interface implementation demonstrated the importance of thoughtful state management:
@@ -62,6 +131,34 @@ The application implements progressive enhancement by:
 - Handling edge cases like network interruptions or page unloads
 
 This approach makes the application more resilient and accessible to all users.
+
+## Session Management Challenges
+
+### Time Tracking Across Components
+Implementing accurate time tracking in a hybrid architecture presented unique challenges:
+
+1. **Client-Side Time Calculation**
+   - Using `Date.now()` in React components for elapsed time calculation
+   - Storing timestamps in refs to prevent unnecessary re-renders
+   - Converting milliseconds to minutes for database storage
+
+2. **Server-Side Verification**
+   - Using database timestamps for official session duration records
+   - Implementing server-side validation of client-reported times
+   - Creating a reliable system that works even with network interruptions
+
+### API Design for Session Updates
+The session update and completion API endpoints required careful design:
+
+1. **Minimal Payload Design**
+   - Sending only essential data (sessionId, totalQuestions, correctAnswers)
+   - Using JSON for structured data transmission
+   - Implementing proper error handling for failed requests
+
+2. **Progressive Enhancement**
+   - Primary update mechanism via standard fetch API
+   - Fallback to navigator.sendBeacon for page unload scenarios
+   - Multiple update mechanisms ensure session data is never lost
 
 ## Database Design Insights
 

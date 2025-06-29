@@ -13,8 +13,7 @@ export interface Question {
   domainName?: string;
   subjectId?: string;
   subjectName?: string;
-  difficulty?: 'easy' | 'medium' | 'hard' | number; // Made compatible with both string and number
-  // Add database schema fields for difficulty
+  // Difficulty fields from database schema
   difficultyBand?: number; // Numeric difficulty band (1-7) used for calculations
   difficultyLetter?: string; // Letter difficulty (E/M/H) used for display
   category?: string; // Added for compatibility with QuizQuestion
@@ -29,7 +28,7 @@ export interface QuizOption {
 export interface QuizSession {
   id: string;
   user_id: string;
-  session_type: 'subject' | 'domain' | 'skill';
+  session_type: 'all' | 'subject' | 'domain' | 'skill';
   target_id: string;
   start_time: string;
   end_time?: string;
@@ -41,7 +40,7 @@ export interface QuizSession {
 
 export interface QuizSessionInsert {
   user_id: string;
-  session_type: 'subject' | 'domain' | 'skill';
+  session_type: 'all' | 'subject' | 'domain' | 'skill';
   target_id: string;
 }
 

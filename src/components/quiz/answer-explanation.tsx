@@ -1,28 +1,18 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-
 import { QuizQuestion } from './quiz-interface';
-import { getSkillHierarchy, getSubjectById } from '@/types/sat-structure';
-import { UserProgress } from '@/types/user-progress';
-import { calculatePointsForQuestion } from '@/utils/rank-points';
 
 interface AnswerExplanationProps {
   question: QuizQuestion;
   selectedAnswer: string;
   onNext: () => void;
-  userProgress?: UserProgress;
-  accumulatedPoints?: Record<string, number>; // Points accumulated in the current session
-  onPointChange?: (skillId: string, points: number) => void; // Callback to update accumulated points
 }
 
 export function AnswerExplanation({ 
   question, 
   selectedAnswer, 
-  onNext, 
-  userProgress,
-  accumulatedPoints = {},
-  onPointChange
+  onNext
 }: AnswerExplanationProps) {
   const [chatMessage, setChatMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<Array<{type: 'user' | 'ai', message: string}>>([]);
@@ -52,214 +42,50 @@ export function AnswerExplanation({
     }, 1000);
   };
 
-  // Always show all four cards regardless of practice type
-  const showOverallCard = true;
-  const showSubjectCard = true;
-  const showDomainCard = true;
-  const showSkillCard = true;
-  
-  // Get subject, domain, and skill info from the question's skillId
-  let subjectName = 'Math';
-  let domainName = 'Algebra';
-  let skillName = 'Linear Equations';
-  
-  // Try to get hierarchy information if skillId is available
-  if (question.skillId) {
-    const hierarchy = getSkillHierarchy(question.skillId);
-    if (hierarchy) {
-      subjectName = hierarchy.subject.name;
-      domainName = hierarchy.domain.name;
-      skillName = hierarchy.skill.name;
-    }
-  } else if (question.category) {
-    // Fallback to using category if available
-    // Try to match category to a domain name
-    const mathSubject = getSubjectById('math');
-    const englishSubject = getSubjectById('english');
-    
-    if (mathSubject && mathSubject.domains.some(d => d.name.toLowerCase().includes(question.category?.toLowerCase() || ''))) {
-      subjectName = 'Math';
-      const matchedDomain = mathSubject.domains.find(d => d.name.toLowerCase().includes(question.category?.toLowerCase() || ''));
-      if (matchedDomain) {
-        domainName = matchedDomain.name;
-        skillName = matchedDomain.skills[0]?.name || 'General Skills';
-      }
-    } else if (englishSubject && englishSubject.domains.some(d => d.name.toLowerCase().includes(question.category?.toLowerCase() || ''))) {
-      subjectName = 'English';
-      const matchedDomain = englishSubject.domains.find(d => d.name.toLowerCase().includes(question.category?.toLowerCase() || ''));
-      if (matchedDomain) {
-        domainName = matchedDomain.name;
-        skillName = matchedDomain.skills[0]?.name || 'General Skills';
-      }
-    } else {
-      // Default fallback
-      if (question.category?.toLowerCase().includes('math') || 
-          question.category?.toLowerCase().includes('algebra') || 
-          question.category?.toLowerCase().includes('geometry')) {
-        subjectName = 'Math';
-      } else {
-        subjectName = 'English';
-      }
-      domainName = question.category || 'General';
-    }
-  }
-  
-  // Calculate point changes for this question
+  // Get basic question info
   const isCorrect = selectedAnswer === question.correctAnswer;
+  const subjectName = question.subjectName || 'Subject';
+  const domainName = question.domainName || 'Domain';
+  const skillName = question.skillName || 'Skill';
   
-  // Use difficulty_band as the primary source for point calculations
-  // The database has both difficulty_band (numeric 1-7) and difficulty_letter (E/M/H)
-  console.log('DEBUG - Full question object:', question);
-  console.log('DEBUG - Question difficulty:', question.difficulty);
-  console.log('DEBUG - Question difficultyBand:', question.difficultyBand);
-  console.log('DEBUG - Question difficultyLetter:', question.difficultyLetter);
-  
-  // Try to get the correct difficulty band
-  const difficultyBand = question.difficultyBand || question.difficulty || 4;
-  console.log('Using difficulty band for points calculation:', difficultyBand);
-  const pointChange = calculatePointsForQuestion(difficultyBand, isCorrect);
-  
-  // Get current skill score and calculate new score
-  const skillId = question.skillId || '';
-  const defaultSkillScore = 200; // Default starting score
-  const baseSkillScore = userProgress?.skillScores[skillId] || defaultSkillScore;
-  const previouslyAccumulated = accumulatedPoints[skillId] || 0;
-  
-  // Current score is base + previously accumulated points
-  const currentSkillScore = baseSkillScore + previouslyAccumulated;
-  const newSkillScore = Math.max(0, Math.min(800, currentSkillScore + pointChange));
-  const skillPointChange = pointChange;
-  
-  // Update accumulated points when component mounts - only once
-  useEffect(() => {
-    if (onPointChange && skillId) {
-      onPointChange(skillId, previouslyAccumulated + pointChange);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);  // Empty dependency array means this runs once on mount
-  
-  console.log("Question: ", question);
-  console.log("Using skillId:", question.skillId);
-  console.log("Subject Name: ", subjectName);
-  console.log("Domain Name: ", domainName);
-  console.log("Skill Name: ", skillName);
-  console.log("Current skill score:", currentSkillScore);
-  console.log("Point change:", pointChange);
-  console.log("New skill score:", newSkillScore);
   
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Left Side - Results */}
       <div className="space-y-6 lg:col-span-2">
-        {/* Dynamic Score Cards */}
+        {/* Question Info Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Overall Card - Always shown */}
-          {showOverallCard && (
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h3 className="text-lg font-bold text-paynes-gray mb-1">All Topics</h3>
-              <p className="text-sm text-glaucous mb-2">Diamond</p>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">1127/1600</span>
-                {skillPointChange !== 0 && (
-                  <span className={`text-xs ${skillPointChange > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {skillPointChange > 0 ? '+' : ''}{Math.round(skillPointChange * 0.25)}
-                  </span>
-                )}
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-2 overflow-hidden">
-                <div className="flex w-full">
-                  <div className="bg-emerald-500 h-2" style={{ width: '70%' }} />
-                  {skillPointChange < 0 && (
-                    <div className="bg-red-500 h-2" style={{ width: '5%' }} />
-                  )}
-                </div>
-              </div>
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <h3 className="text-lg font-bold text-paynes-gray mb-1">{subjectName}</h3>
+            <p className="text-sm text-glaucous mb-2">Subject</p>
+            <div className="flex items-center gap-2">
+              <span className={`text-lg font-bold ${
+                isCorrect ? 'text-emerald-600' : 'text-red-600'
+              }`}>
+                {isCorrect ? 'Correct!' : 'Incorrect'}
+              </span>
             </div>
-          )}
-
-          {/* Subject Card - Shown for subject, domain, and skill practice */}
-          {showSubjectCard && (
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h3 className="text-lg font-bold text-paynes-gray mb-1">{subjectName}</h3>
-              <p className="text-sm text-glaucous mb-2">SAThlete</p>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">1567/1600</span>
-                {skillPointChange !== 0 && (
-                  <span className={`text-xs ${skillPointChange > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {skillPointChange > 0 ? '+' : ''}{Math.round(skillPointChange * 0.5)}
-                  </span>
-                )}
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-2 overflow-hidden">
-                <div className="flex w-full">
-                  <div className="bg-emerald-500 h-2" style={{ width: '90%' }} />
-                  {skillPointChange < 0 && (
-                    <div className="bg-red-500 h-2" style={{ width: '10%' }} />
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
           
-          {/* Domain Card - Shown for domain and skill practice */}
-          {showDomainCard && (
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h3 className="text-lg font-bold text-paynes-gray mb-1">{domainName}</h3>
-              <p className="text-sm text-glaucous mb-2">Apprentice</p>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">350/800</span>
-                {skillPointChange !== 0 && (
-                  <span className={`text-xs ${skillPointChange > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {skillPointChange > 0 ? '+' : ''}{Math.round(skillPointChange * 0.8)}
-                  </span>
-                )}
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-2 overflow-hidden">
-                <div className="flex w-full">
-                  <div className="bg-emerald-500 h-2" style={{ width: '43%' }} />
-                  {skillPointChange < 0 && (
-                    <div className="bg-red-500 h-2" style={{ width: '2%' }} />
-                  )}
-                </div>
-              </div>
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <h3 className="text-lg font-bold text-paynes-gray mb-1">{domainName}</h3>
+            <p className="text-sm text-glaucous mb-2">Domain</p>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">
+                Difficulty: {question.difficultyLetter || 'M'}
+              </span>
             </div>
-          )}
+          </div>
           
-          {/* Skill Card - Shown only for skill practice */}
-          {showSkillCard && (
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h3 className="text-lg font-bold text-paynes-gray mb-1">{skillName}</h3>
-              <p className="text-sm text-glaucous mb-2">Novice</p>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{currentSkillScore}/800</span>
-                {skillPointChange !== 0 && (
-                  <span className={`text-xs ${skillPointChange > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {skillPointChange > 0 ? '+' : ''}{skillPointChange}
-                  </span>
-                )}
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-2 overflow-hidden">
-                <div className="flex w-full">
-                  <div 
-                    className="bg-emerald-500 h-2" 
-                    style={{ width: `${Math.min(100, Math.max(0, (currentSkillScore / 800) * 100))}%` }} 
-                  />
-                  {skillPointChange < 0 && (
-                    <div 
-                      className="bg-red-500 h-2" 
-                      style={{ width: `${Math.min(100, Math.abs(skillPointChange / 800) * 100)}%` }} 
-                    />
-                  )}
-                </div>
-              </div>
-              {/* Show before/after scores */}
-              {skillPointChange !== 0 && (
-                <div className="mt-1 text-xs text-gray-500">
-                  {currentSkillScore} → {newSkillScore}
-                </div>
-              )}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <h3 className="text-lg font-bold text-paynes-gray mb-1">{skillName}</h3>
+            <p className="text-sm text-glaucous mb-2">Skill</p>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">
+                Question Type: {question.type}
+              </span>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Answer Result */}
