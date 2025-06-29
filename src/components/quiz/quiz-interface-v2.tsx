@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { QuestionCard } from './question-card';
 import { QuizProgressBar } from './quiz-progress-bar';
 import { AnswerExplanation } from './answer-explanation';
@@ -44,7 +43,6 @@ export interface QuizInterfaceProps {
 export default function QuizInterface({
   questions: initialQuestions,
   subjectTitle,
-  userId,
   sessionId,
   sessionLevel,
   sessionTargetId
@@ -367,6 +365,9 @@ export default function QuizInterface({
       }
     }
     
+    // Update session before moving to next set
+    await updateQuizSession();
+    
     // Move to next set
     console.log('➡️ Moving to next set:', currentSet + 1);
     setCurrentSet(prev => prev + 1);
@@ -402,7 +403,6 @@ export default function QuizInterface({
   const handleSubmitAnswer = async () => {
     if (!currentQuestion || !currentSetAnswers[currentQuestion.id]) return;
     
-    const timeSpent = Math.floor((Date.now() - questionStartTime.current) / 1000);
     const isCorrect = currentSetAnswers[currentQuestion.id] === currentQuestion.correctAnswer;
     
     // Update session tracking stats
@@ -417,12 +417,54 @@ export default function QuizInterface({
     questionStartTime.current = Date.now();
   };
 
-  const handleNextFromExplanation = () => {
+  // Update quiz session progress using SQL function when entering summary
+  const updateQuizSession = useCallback(async () => {
+    if (!sessionId) {
+      console.log('🔄 No sessionId available for session update');
+      return;
+    }
+
+    const timeSpentMinutes = Math.round((Date.now() - sessionStartTime.current) / 1000 / 60);
+    
+    const sessionUpdateData = {
+      sessionId,
+      total_questions: totalAnswered,
+      correct_answers: totalCorrect,
+      time_spent_minutes: timeSpentMinutes
+    };
+
+    console.log('🔄 UPDATING QUIZ SESSION on summary entry:');
+    console.log('  - Session ID:', sessionId);
+    console.log('  - Total Questions:', totalAnswered);
+    console.log('  - Correct Answers:', totalCorrect);
+    console.log('  - Time Spent (minutes):', timeSpentMinutes);
+
+    try {
+      const response = await fetch('/api/update-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sessionUpdateData),
+      });
+
+      if (!response.ok) {
+        console.error('❌ Session update failed:', response.statusText);
+        return;
+      }
+
+      const result = await response.json();
+      console.log('✅ Session updated successfully:', result);
+    } catch (error) {
+      console.error('💥 Error updating session:', error);
+    }
+  }, [sessionId, totalAnswered, totalCorrect]);
+
+  const handleNextFromExplanation = async () => {
     if (currentQuestionIndex < currentQuestions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
       setQuizState('question');
     } else {
-      // End of current set - show summary
+      // End of current set - update session and show summary
+      await updateQuizSession();
       setQuizState('summary');
     }
     questionStartTime.current = Date.now();

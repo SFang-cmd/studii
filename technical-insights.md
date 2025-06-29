@@ -508,6 +508,223 @@ Implemented comprehensive debug logging with:
 - **Maintenance Cost Consideration**: Balance performance gains against code complexity
 - **Simplicity Priority**: Keep solutions simple until complexity is clearly justified
 
+## Progressive Quiz Session Updates Implementation (June 2025)
+
+### Challenge: Separating Session Updates from Session Completion
+
+**Problem Context:**
+The existing session management system only updated session statistics upon completion, creating a gap in progress tracking for long practice sessions. Users could answer hundreds of questions across multiple sets without any database record of their progress until they exited the quiz entirely.
+
+**Technical Requirements:**
+1. Track cumulative session progress after each question set completion
+2. Maintain session continuity across multiple question sets
+3. Preserve existing session completion detection for page exits
+4. Ensure data integrity with proper security controls
+
+### Solution Architecture: Three-Tier Session Management
+
+**Architectural Decision:**
+Implemented a progressive update system that separates ongoing progress tracking from final session completion:
+
+```sql
+-- Tier 1: Session Creation (Initial State)
+create_quiz_session(user_id, session_type, target_id)
+→ Creates session with zero baseline statistics
+→ Returns UUID for subsequent operations
+
+-- Tier 2: Progressive Updates (Non-Destructive)
+update_quiz_session(session_id, total_questions, correct_answers, time_spent)
+→ Updates cumulative statistics without changing session state
+→ Preserves is_completed = false for session continuation
+
+-- Tier 3: Session Completion (State Change)
+complete_quiz_session(session_id, total_questions, correct_answers, time_spent)
+→ Updates final statistics and marks session as completed
+→ Prevents further updates to protect data integrity
+```
+
+### Database Function Design Strategy
+
+**Security-First Implementation:**
+```sql
+CREATE OR REPLACE FUNCTION update_quiz_session(
+  p_session_id UUID,
+  p_total_questions INT4,
+  p_correct_answers INT4,
+  p_time_spent_minutes INT4
+) RETURNS TABLE (...)
+SECURITY DEFINER AS $$
+BEGIN
+  RETURN QUERY
+  UPDATE quiz_sessions 
+  SET 
+    total_questions = p_total_questions,
+    correct_answers = p_correct_answers,
+    time_spent_minutes = p_time_spent_minutes,
+    updated_at = NOW()
+  WHERE quiz_sessions.id = p_session_id
+    AND quiz_sessions.user_id = auth.uid() -- User isolation
+    AND quiz_sessions.is_completed = false -- Active sessions only
+  RETURNING *;
+END;
+$$;
+```
+
+**Key Design Decisions:**
+1. **User Authentication at SQL Level**: `auth.uid()` check prevents cross-user session manipulation
+2. **Active Session Restriction**: Only allows updates to non-completed sessions
+3. **Non-Destructive Updates**: Preserves session state while updating progress
+4. **Atomic Operations**: All field updates happen in single transaction
+
+### Client-Side Integration Strategy
+
+**Update Trigger Points:**
+Identified two optimal locations for session updates in the quiz flow:
+
+```typescript
+// Trigger 1: When completing a question set (entering summary)
+const handleNextFromExplanation = async () => {
+  if (currentQuestionIndex < currentQuestions.length - 1) {
+    setCurrentQuestionIndex(prev => prev + 1);
+    setQuizState('question');
+  } else {
+    // User completed 10th question - update session before showing summary
+    await updateQuizSession();
+    setQuizState('summary');
+  }
+};
+
+// Trigger 2: When transitioning between question sets
+const handleNextSet = async () => {
+  // Update session with current progress before loading new questions
+  await updateQuizSession();
+  
+  // Continue with normal set transition logic
+  setCurrentSet(prev => prev + 1);
+  setCurrentQuestionIndex(0);
+  setQuizState('question');
+};
+```
+
+**Implementation Benefits:**
+- **Natural User Flow**: Updates align with meaningful progress milestones
+- **Non-Intrusive**: No interruption to user interaction flow
+- **Cumulative Tracking**: Session statistics remain accurate across sets
+- **Fault Tolerance**: Updates independent of session completion detection
+
+### API Endpoint Architecture
+
+**Dedicated Update Endpoint:**
+Created `/api/update-session` as separate endpoint from `/api/complete-session`:
+
+```typescript
+export async function POST(request: NextRequest) {
+  try {
+    console.log('🔄 Session update request received');
+    
+    // User authentication validation
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.log('❌ Session update failed: Unauthorized');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Call SQL function with session data
+    const { data: sessions, error: sessionError } = await supabase
+      .rpc('update_quiz_session', {
+        p_session_id: sessionId,
+        p_total_questions: total_questions || 0,
+        p_correct_answers: correct_answers || 0,
+        p_time_spent_minutes: time_spent_minutes || 0
+      });
+
+    console.log('✅ Session updated successfully:', updatedSession.id);
+    return NextResponse.json({ session: updatedSession });
+  } catch (error) {
+    console.log('💥 Session update error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+```
+
+**Design Rationale:**
+- **Separate Concerns**: Update operations distinct from completion operations
+- **Consistent Interface**: Same parameter structure as completion endpoint
+- **Comprehensive Logging**: Emoji-based debugging for production troubleshooting
+- **Error Isolation**: Update failures don't affect session completion logic
+
+### Data Flow Architecture
+
+**Complete Session Lifecycle:**
+```
+Page Load → create_quiz_session() → Session Created (0/0/0)
+    ↓
+Answer Questions → Local State Tracking → Real-time Counters
+    ↓ 
+Complete Set 1 → update_quiz_session() → Session Updated (10/7/5)
+    ↓
+Continue Practice → Answer More Questions → Updated Counters
+    ↓
+Complete Set 2 → update_quiz_session() → Session Updated (20/14/12)
+    ↓
+[Repeat for multiple sets...]
+    ↓
+Exit Practice → complete_quiz_session() → Session Completed (50/35/30)
+```
+
+**Benefits Achieved:**
+- **Progressive Visibility**: Session progress visible throughout practice
+- **Analytics Ready**: Real-time data for future recommendation systems
+- **User Recovery**: Sessions can be resumed with accurate progress tracking
+- **Performance Monitoring**: Session duration and accuracy trends over time
+
+### Security and Data Integrity
+
+**Multi-Layer Protection:**
+1. **Database Level**: Row Level Security (RLS) policies restrict access
+2. **Function Level**: `SECURITY DEFINER` with `auth.uid()` validation
+3. **API Level**: User authentication before database operations
+4. **Application Level**: Session ID validation and state checks
+
+**Data Consistency Guarantees:**
+- **Atomic Updates**: All session fields updated in single transaction
+- **State Protection**: Updates only allowed on active sessions
+- **User Isolation**: Sessions cannot be accessed across user boundaries
+- **Audit Trail**: `updated_at` timestamp tracks all modifications
+
+### Performance and Scalability Considerations
+
+**Optimization Strategies:**
+```sql
+-- Efficient update using primary key lookup
+WHERE quiz_sessions.id = p_session_id  -- UUID primary key (indexed)
+  AND quiz_sessions.user_id = auth.uid()  -- Foreign key (indexed)
+  AND quiz_sessions.is_completed = false  -- Boolean filter
+```
+
+**Scalability Benefits:**
+- **Lightweight Operations**: Only essential fields updated per call
+- **Index Usage**: All WHERE conditions use database indexes
+- **Minimal Lock Time**: Fast atomic operations reduce contention
+- **Session Isolation**: Concurrent users don't interfere with each other
+
+### Testing and Validation Strategy
+
+**Integration Testing Approach:**
+1. **Session Creation**: Verify initial session creation with zero stats
+2. **Progressive Updates**: Test cumulative statistics across multiple sets
+3. **Concurrent Access**: Ensure user isolation during simultaneous sessions
+4. **Error Scenarios**: Validate proper handling of invalid sessions
+5. **Completion Flow**: Confirm final completion works after multiple updates
+
+**Data Validation:**
+- **Cumulative Accuracy**: Verify statistics increase correctly across sets
+- **Time Tracking**: Confirm time calculations remain accurate over long sessions
+- **State Preservation**: Ensure session remains active after updates
+- **Security Compliance**: Test user authentication and authorization
+
+This progressive session update implementation demonstrates how complex state management can be simplified through careful separation of concerns, while maintaining data integrity and user experience quality.
+
 ## Session Management Simplification Initiative (June 2025)
 
 ### Challenge: Over-Engineering and Complexity Debt
