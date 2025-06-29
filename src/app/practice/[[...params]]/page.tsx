@@ -4,7 +4,7 @@ import { QuizQuestion } from "@/components/quiz/quiz-interface-v2";
 import { notFound } from "next/navigation";
 import { getSubjectById, getSkillHierarchy, getDomainHierarchy } from "@/types/sat-structure";
 import { createClient } from '@/utils/supabase/server'
-import { getQuestionsForPractice, createQuizSession } from '@/utils/database'
+import { getQuestionsForPractice } from '@/utils/database'
 import { Question } from '@/types/database'
 
 // Simple fallback questions when database fetch fails
@@ -181,24 +181,7 @@ export default async function PracticePage(props: PracticePageProps) {
     notFound();
   }
 
-  // Create a fresh quiz session for this practice attempt
-  let quizSession = null;
-  try {
-    // Determine session target based on level
-    const sessionTarget = level === 'skill' ? skillId : 
-                         level === 'domain' ? domainId : 
-                         level === 'subject' ? subjectId : 'all';
-    
-    // Always create a new session for each practice page visit
-    quizSession = await createQuizSession({
-      user_id: user.id,
-      session_type: level as 'all' | 'subject' | 'domain' | 'skill',
-      target_id: sessionTarget
-    });
-  } catch (error) {
-    console.error('Error creating quiz session:', error);
-    // Continue without session tracking if it fails
-  }
+  // Session tracking removed - will be reimplemented later if needed
 
   // Fetch questions from database
   console.log('=== PRACTICE PAGE DEBUG ===');
@@ -230,9 +213,7 @@ export default async function PracticePage(props: PracticePageProps) {
             questions={processedQuestions}
             subject={level === 'subject' && target ? target : 'all'}
             subjectTitle={title}
-            sessionId={quizSession?.id}
             userId={user.id}
-            sessionType={level === 'all' ? 'overall' : level as 'skill' | 'domain' | 'subject'}
           />
         </div>
       </main>

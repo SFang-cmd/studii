@@ -33,17 +33,13 @@ export interface QuizInterfaceProps {
   questions: QuizQuestion[];
   subject: string;
   subjectTitle: string;
-  sessionId?: string;
   userId?: string;
-  sessionType?: 'skill' | 'domain' | 'subject' | 'overall';
 }
 
 export default function QuizInterface({
   questions: initialQuestions,
   subjectTitle,
-  sessionId,
-  userId,
-  sessionType = 'overall'
+  userId
 }: QuizInterfaceProps): React.ReactNode {
   // Core quiz state
   const [currentSet, setCurrentSet] = useState(0);
@@ -56,12 +52,9 @@ export default function QuizInterface({
   const [seenQuestionIds, setSeenQuestionIds] = useState<Set<string>>(new Set());
   const [isLoadingNextSet, setIsLoadingNextSet] = useState(false);
   
-  // Session tracking
-  const [sessionStats, setSessionStats] = useState({
-    totalAnswered: 0,
-    totalCorrect: 0,
-    totalTimeSeconds: 0
-  });
+  // Basic tracking (no session persistence)
+  const [totalAnswered, setTotalAnswered] = useState(0);
+  const [totalCorrect, setTotalCorrect] = useState(0);
   const questionStartTime = useRef<number>(Date.now());
 
   // Current question data
@@ -92,50 +85,9 @@ export default function QuizInterface({
   const allCurrentSetCompleted = currentQuestions.length > 0 && 
     answeredIndices.size === currentQuestions.length;
   
-  // Complete session on page exit only
-  const completeSession = useCallback(async () => {
-    if (!sessionId) return;
-    
-    try {
-      const response = await fetch('/api/complete-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          totalQuestions: sessionStats.totalAnswered,
-          correctAnswers: sessionStats.totalCorrect,
-          timeSpentMinutes: Math.round(sessionStats.totalTimeSeconds / 60)
-        })
-      });
-      if (response.ok) {
-        console.log('Session completed successfully');
-      }
-    } catch (error) {
-      console.error('Error completing session:', error);
-    }
-  }, [sessionId, sessionStats]);
+  // Session completion removed - no persistence needed
 
-  // Handle page exit session cleanup
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (navigator.sendBeacon && sessionId) {
-        const data = JSON.stringify({
-          sessionId,
-          totalQuestions: sessionStats.totalAnswered,
-          correctAnswers: sessionStats.totalCorrect,
-          timeSpentMinutes: Math.round(sessionStats.totalTimeSeconds / 60)
-        });
-        navigator.sendBeacon('/api/complete-session-beacon', data);
-      }
-    };
-    
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      // Only remove the event listener on cleanup
-      // Session completion should only happen via beforeunload
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [sessionId, sessionStats]);
+  // No session cleanup needed
 
 
 
@@ -146,38 +98,39 @@ export default function QuizInterface({
     }
   }, [currentQuestion]);
   
-  // Fetch next question set
+  // Fetch next question set - simplified without session
   const fetchMoreQuestions = useCallback(async () => {
     setIsLoadingNextSet(true);
     
     try {
-      const response = await fetch('/api/fetch-more-questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId, // Use session ID to determine question context
-          excludedQuestionIds: Array.from(seenQuestionIds)
-        })
-      });
+      // For now, just generate fallback questions
+      // TODO: Implement proper question fetching without sessions
+      const fallbackQuestions = Array.from({ length: 10 }, (_, i) => ({
+        id: `set-${Date.now()}-${i}`,
+        question: `<p>Additional question ${i + 1}. More questions coming soon!</p>`,
+        type: "multiple-choice" as const,
+        options: [
+          { id: "A", text: "<p>Option A</p>" },
+          { id: "B", text: "<p>Option B</p>" },
+          { id: "C", text: "<p>Option C</p>" },
+          { id: "D", text: "<p>Option D</p>" }
+        ],
+        correctAnswer: "A",
+        explanation: "This is a placeholder question.",
+        category: "Practice",
+        difficultyBand: 3,
+        skillId: "fallback-skill"
+      }));
       
-      if (response.ok) {
-        const data = await response.json();
-        if (data.questions?.length > 0) {
-          setAllQuestionSets(prev => [...prev, data.questions]);
-          data.questions.forEach((q: QuizQuestion) => 
-            setSeenQuestionIds(prev => new Set([...prev, q.id]))
-          );
-          return true;
-        }
-      }
-      return false;
+      setAllQuestionSets(prev => [...prev, fallbackQuestions]);
+      return true;
     } catch (error) {
       console.error('Error fetching questions:', error);
       return false;
     } finally {
       setIsLoadingNextSet(false);
     }
-  }, [sessionId, seenQuestionIds]);
+  }, [seenQuestionIds]);
 
   // Prefetch next set when approaching end of current set
   useEffect(() => {
@@ -225,35 +178,13 @@ export default function QuizInterface({
     const timeSpent = Math.floor((Date.now() - questionStartTime.current) / 1000);
     const isCorrect = selectedAnswers[currentQuestion.id] === currentQuestion.correctAnswer;
     
-    // Update session stats
-    setSessionStats(prev => ({
-      totalAnswered: prev.totalAnswered + 1,
-      totalCorrect: prev.totalCorrect + (isCorrect ? 1 : 0),
-      totalTimeSeconds: prev.totalTimeSeconds + timeSpent
-    }));
-    
-    // Record answer if session exists and it's not a fallback question
-    if (sessionId && userId && currentQuestion.skillId && 
-        !currentQuestion.id.includes('fallback')) {
-      try {
-        await fetch('/api/record-answer', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId,
-            questionId: currentQuestion.id, // Already a string (UUID)
-            skillId: currentQuestion.skillId,
-            difficultyLevel: currentQuestion.difficultyBand || 4,
-            userAnswer: selectedAnswers[currentQuestion.id],
-            correctAnswer: currentQuestion.correctAnswer,
-            isCorrect,
-            timeSpentSeconds: timeSpent
-          })
-        });
-      } catch (error) {
-        console.error('Error recording answer:', error);
-      }
+    // Update basic stats (no persistence)
+    setTotalAnswered(prev => prev + 1);
+    if (isCorrect) {
+      setTotalCorrect(prev => prev + 1);
     }
+    
+    // Answer recording removed - will be reimplemented later
     
     setQuizState('explanation');
     questionStartTime.current = Date.now();
@@ -279,7 +210,7 @@ export default function QuizInterface({
         currentSet={currentSet}
         selectedAnswers={currentSetAnswers}
         onNextSet={handleNextSet}
-        quizType={sessionType as 'skill' | 'domain' | 'subject' | 'overall'}
+        quizType="overall"
         isLoadingNextSet={isLoadingNextSet}
       />
     );
