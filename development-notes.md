@@ -356,7 +356,83 @@ CREATE INDEX idx_questions_external_id ON questions(external_id) WHERE external_
 - ⚠️ Query performance: Not optimized for large datasets
 - ❌ Migration system: Manual schema updates only
 
-### Recent Changes (June 2025): Session Completion Simplification
+### Recent Changes (June 2025): Question Fetching and State Management
+
+#### Set-Scoped Answer System Implementation
+**Date**: June 29, 2025
+**Major Fix**: Implemented set-scoped answer storage to prevent question state persistence across question sets
+
+**Problem Identified:**
+- Questions with identical IDs appearing in different sets showed pre-selected answers
+- Global `selectedAnswers` state caused UX confusion where users saw "answered" questions in fresh sets
+- Progress bar incorrectly displayed green checkmarks for questions not yet answered in current set
+
+**Solution Implemented:**
+```typescript
+// Before: Global answer state
+const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
+
+// After: Set-scoped answer state  
+const [selectedAnswersBySet, setSelectedAnswersBySet] = useState<Record<number, Record<string, string>>>({});
+const currentSetAnswers = selectedAnswersBySet[currentSet] || {};
+```
+
+**Benefits:**
+- ✅ Each question set starts completely fresh with no pre-selected answers
+- ✅ Users can have same questions in different sets without interference
+- ✅ Independent progress tracking per set
+- ✅ Session continuity - previous set answers preserved for potential review
+
+**Files Modified:**
+- `src/components/quiz/quiz-interface-v2.tsx`: Complete state management overhaul
+- All answer selection, submission, and display logic updated to use scoped answers
+- Enhanced debug logging for set transitions and answer tracking
+
+**Memory Impact Analysis:**
+- ~600-800 bytes per 10-question set
+- Negligible for typical practice sessions (<1MB even for 1000+ questions)
+- Self-limiting as page refresh clears all state
+
+**Current Status:**
+- ✅ Answer isolation working correctly
+- ✅ Fresh question sets without pre-selected answers
+- ❌ Progress bar display still needs fixes (right/wrong indicators)
+- ❌ Quiz session updates not yet implemented
+
+#### Question Exclusion System (Temporarily Disabled)
+**Date**: June 29, 2025
+**Decision**: Disabled `excludeQuestionIds` parameter for question fetching to simplify the immediate implementation
+
+**What was disabled:**
+- `excludeQuestionIds` parameter in quiz interface fetch calls
+- `excludeAnsweredQuestions` flag in API endpoints  
+- Question ID tracking for duplicate prevention
+- Related database query exclusion logic
+
+**Rationale:**
+- Focus on core question fetching functionality without complex deduplication
+- Avoid implementing answer tracking infrastructure before it's needed
+- Simplify debugging process for basic question set transitions
+
+**Files affected:**
+- `src/components/quiz/quiz-interface-v2.tsx`: Commented out excludeQuestionIds in API calls
+- `src/app/api/questions/fetch/route.ts`: Disabled excludeQuestionIds parameter processing
+- `src/utils/database.ts`: ExcludeAnsweredQuestions parameter disabled
+
+**Future implementation needed:**
+- User answer tracking table (`user_session_answers` currently disabled)
+- Question duplicate prevention logic
+- Session-based answered question exclusion
+- Cross-session answered question history (optional)
+
+**Implementation approach when re-enabled:**
+1. Enable `user_session_answers` table schema
+2. Implement answer recording with question ID tracking
+3. Add `getUserAnsweredQuestions()` function to database utilities
+4. Re-enable excludeQuestionIds parameter in API endpoints
+5. Update quiz interface to pass seen question IDs
+
+### Session Completion Simplification
 
 #### Problem
 The quiz session completion system had become overly complex with:

@@ -2,6 +2,82 @@
 
 This document captures the technical challenges encountered during the Studii project development and the strategic approaches used to overcome them. These insights demonstrate problem-solving methodologies, architectural decision-making, and the evolution of complex system design.
 
+## Set-Scoped State Management for Question Deduplication (June 2025)
+
+### Challenge: Memory-Efficient Storage of Identical Question IDs Across Sets
+
+**Problem Context:**
+In a continuous practice system where users answer questions in sets of 10, the same question (with identical UUID) could appear in multiple sets. The initial global state approach caused UX issues where questions appeared pre-answered in fresh sets, while a naive exclusion approach would eventually exhaust the question pool.
+
+**Technical Challenge:**
+Design a memory-efficient state structure that:
+1. Prevents answer state bleeding between question sets
+2. Supports identical questions appearing cleanly in different sets  
+3. Maintains reasonable memory footprint for extended practice sessions
+4. Preserves session continuity for potential set review functionality
+
+**Solution Analysis:**
+
+**Option 1: Global Exclusion (Rejected)**
+```typescript
+// Would prevent duplicate questions entirely
+const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>();
+// Problem: Eventually exhausts question pool, requires complex backfill logic
+```
+
+**Option 2: Set-Scoped Storage (Implemented)**
+```typescript
+// Isolates answers per set while allowing duplicates across sets
+const [selectedAnswersBySet, setSelectedAnswersBySet] = useState<Record<number, Record<string, string>>>({});
+```
+
+**Memory Impact Analysis:**
+
+**Per-Set Storage Cost:**
+- 10 questions × (36-char UUID + 1-char answer) = ~370 characters
+- JavaScript object overhead: ~200-400 bytes  
+- **Total per set: ~600-800 bytes**
+
+**Extended Session Projections:**
+- 100 sets (1,000 questions): ~60-80 KB
+- 500 sets (5,000 questions): ~300-400 KB
+- 1,000 sets (10,000 questions): ~600-800 KB
+
+**Design Decision Rationale:**
+1. **Acceptable Memory Cost**: Even worst-case scenarios remain under 1MB
+2. **User Behavior Patterns**: Marathon sessions >1000 questions are extremely rare
+3. **Natural Cleanup**: Page refresh/navigation clears all state
+4. **UX Priority**: Clean question set experience outweighs minimal memory cost
+
+**Implementation Strategy:**
+```typescript
+// Set-scoped answer management
+const currentSetAnswers = selectedAnswersBySet[currentSet] || {};
+
+const handleAnswerSelect = (questionId: string, answer: string) => {
+  setSelectedAnswersBySet(prev => ({
+    ...prev,
+    [currentSet]: {
+      ...prev[currentSet],
+      [questionId]: answer
+    }
+  }));
+};
+```
+
+**Results Achieved:**
+- ✅ Zero answer state interference between sets
+- ✅ Identical questions display cleanly in different sets
+- ✅ Memory usage remains negligible even for extended sessions
+- ✅ Session continuity preserved for multi-set review capability
+
+**Potential Future Optimizations (if needed):**
+1. **Sliding Window**: Retain only last N sets in memory
+2. **Summary Storage**: Store correctness counts instead of full answer data
+3. **Lazy Cleanup**: Remove old sets after usage thresholds
+
+This approach demonstrates how technical decisions should prioritize user experience while maintaining engineering pragmatism around resource usage.
+
 ## Session Management Architecture Implementation (January 2025)
 
 ### Challenge: Designing Robust Session Lifecycle Management

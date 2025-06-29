@@ -36,19 +36,25 @@ export interface QuizInterfaceProps {
   subjectTitle: string;
   userId?: string;
   sessionId?: string;
+  // Add the session parameters needed for fetching more questions
+  sessionLevel: 'all' | 'subject' | 'domain' | 'skill';
+  sessionTargetId: string;
 }
 
 export default function QuizInterface({
   questions: initialQuestions,
   subjectTitle,
   userId,
-  sessionId
+  sessionId,
+  sessionLevel,
+  sessionTargetId
 }: QuizInterfaceProps): React.ReactNode {
   // Core quiz state
   const [currentSet, setCurrentSet] = useState(0);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [quizState, setQuizState] = useState<'question' | 'explanation' | 'summary'>('question');
-  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
+  // Change selectedAnswers to be scoped per set: setIndex -> questionId -> answer
+  const [selectedAnswersBySet, setSelectedAnswersBySet] = useState<Record<number, Record<string, string>>>({});
   
   // Question management
   const [allQuestionSets, setAllQuestionSets] = useState<QuizQuestion[][]>([initialQuestions]);
@@ -67,12 +73,22 @@ export default function QuizInterface({
   const currentQuestion = currentQuestions[currentQuestionIndex];
   const isLastQuestionInSet = currentQuestionIndex === currentQuestions.length - 1;
   
-  // Get answered questions for current set only
-  const currentSetAnswers = Object.fromEntries(
-    Object.entries(selectedAnswers).filter(([id]) => 
-      currentQuestions.some(q => q.id === id)
-    )
-  );
+  // Helper to get current set's answers
+  const currentSetAnswers = selectedAnswersBySet[currentSet] || {};
+  
+  // Debug current question state
+  useEffect(() => {
+    if (currentQuestion) {
+      console.log('🎯 CURRENT QUESTION DEBUG:');
+      console.log('  - Set:', currentSet, 'Question:', currentQuestionIndex);
+      console.log('  - Question ID:', currentQuestion.id);
+      console.log('  - Has existing answer?', !!currentSetAnswers[currentQuestion.id]);
+      console.log('  - Existing answer value:', currentSetAnswers[currentQuestion.id]);
+      console.log('  - Question text preview:', currentQuestion.question.substring(0, 50) + '...');
+      console.log('  - All answers for current set:', currentSetAnswers);
+      console.log('  - All answers by set:', selectedAnswersBySet);
+    }
+  }, [currentQuestion, currentSet, currentQuestionIndex, currentSetAnswers, selectedAnswersBySet]);
   
   // Track progress for current set by index (for progress bar)
   const answeredIndices = new Set<string>();
@@ -184,16 +200,77 @@ export default function QuizInterface({
 
 
   
-  // Fetch next question set - simplified without session
+  // Fetch next question set using the same database approach as initial questions
   const fetchMoreQuestions = useCallback(async () => {
+    console.log('🔄 FETCH MORE QUESTIONS - Starting');
+    console.log('🔍 Session level:', sessionLevel);
+    console.log('🔍 Session target ID:', sessionTargetId);
+    console.log('🔍 Current set:', currentSet);
+    console.log('🔍 Seen question IDs count:', seenQuestionIds.size);
+    console.log('🔍 Seen question IDs:', Array.from(seenQuestionIds));
+    
     setIsLoadingNextSet(true);
     
     try {
-      // For now, just generate fallback questions
-      // TODO: Implement proper question fetching without sessions
+      // Call a simple API that uses the existing getQuestionsForPractice function
+      const response = await fetch('/api/questions/fetch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          level: sessionLevel,
+          targetId: sessionTargetId,
+          // excludeQuestionIds: Array.from(seenQuestionIds), // Disabled for now - implement later
+          limit: 10
+        })
+      });
+
+      console.log('🌐 API Response status:', response.status);
+      
+      if (!response.ok) {
+        console.error('❌ API Response not OK:', response.statusText);
+        throw new Error(`Failed to fetch questions: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('📊 Questions received:', result.questions?.length || 0);
+      
+      if (result.questions && result.questions.length > 0) {
+        console.log('✅ Using database questions for next set');
+        setAllQuestionSets(prev => [...prev, result.questions]);
+        return true;
+      } else {
+        console.log('⚠️ No database questions available, using fallback');
+        // Generate fallback questions as last resort
+        const fallbackQuestions = Array.from({ length: 10 }, (_, i) => ({
+          id: `fallback-set-${currentSet + 1}-${i}`,
+          question: `<p>Fallback question ${i + 1} for set ${currentSet + 1}. No database questions available.</p>`,
+          type: "multiple-choice" as const,
+          options: [
+            { id: "A", text: "<p>Option A</p>" },
+            { id: "B", text: "<p>Option B</p>" },
+            { id: "C", text: "<p>Option C</p>" },
+            { id: "D", text: "<p>Option D</p>" }
+          ],
+          correctAnswer: "A",
+          explanation: "This is a fallback question because no database questions were available.",
+          category: "Practice",
+          difficultyBand: 3,
+          skillId: "fallback-skill"
+        }));
+        
+        setAllQuestionSets(prev => [...prev, fallbackQuestions]);
+        return true;
+      }
+    } catch (error) {
+      console.error('💥 Error fetching questions:', error);
+      
+      // Generate fallback questions on error
+      console.log('🔄 Generating fallback questions due to error');
       const fallbackQuestions = Array.from({ length: 10 }, (_, i) => ({
-        id: `set-${Date.now()}-${i}`,
-        question: `<p>Additional question ${i + 1}. More questions coming soon!</p>`,
+        id: `error-fallback-set-${currentSet + 1}-${i}`,
+        question: `<p>Error fallback question ${i + 1}. Could not fetch from database.</p>`,
         type: "multiple-choice" as const,
         options: [
           { id: "A", text: "<p>Option A</p>" },
@@ -202,28 +279,36 @@ export default function QuizInterface({
           { id: "D", text: "<p>Option D</p>" }
         ],
         correctAnswer: "A",
-        explanation: "This is a placeholder question.",
+        explanation: "This is a fallback question due to an error fetching from the database.",
         category: "Practice",
         difficultyBand: 3,
         skillId: "fallback-skill"
       }));
       
       setAllQuestionSets(prev => [...prev, fallbackQuestions]);
-      return true;
-    } catch (error) {
-      console.error('Error fetching questions:', error);
       return false;
     } finally {
       setIsLoadingNextSet(false);
+      console.log('🏁 FETCH MORE QUESTIONS - Completed');
     }
-  }, [seenQuestionIds]);
+  }, [seenQuestionIds, sessionLevel, sessionTargetId, currentSet]);
 
   // Prefetch next set when approaching end of current set
   useEffect(() => {
-    if (isLastQuestionInSet && 
+    const shouldPrefetch = isLastQuestionInSet && 
         quizState === 'question' && 
         !allQuestionSets[currentSet + 1] && 
-        !isLoadingNextSet) {
+        !isLoadingNextSet;
+        
+    console.log('🔮 PREFETCH CHECK:');
+    console.log('  - Is last question in set?', isLastQuestionInSet);
+    console.log('  - Quiz state is question?', quizState === 'question');
+    console.log('  - Next set missing?', !allQuestionSets[currentSet + 1]);
+    console.log('  - Not already loading?', !isLoadingNextSet);
+    console.log('  - Should prefetch?', shouldPrefetch);
+    
+    if (shouldPrefetch) {
+      console.log('🔮 Prefetching next question set');
       fetchMoreQuestions();
     }
   }, [currentQuestionIndex, quizState, currentSet, isLoadingNextSet, allQuestionSets, fetchMoreQuestions, isLastQuestionInSet]);
@@ -231,15 +316,63 @@ export default function QuizInterface({
 
 
   const handleNextSet = async () => {
+    console.log('🚀 HANDLE NEXT SET - Starting');
+    console.log('🔍 Current set:', currentSet);
+    console.log('🔍 Available sets:', allQuestionSets.length);
+    console.log('🔍 Next set exists?', !!allQuestionSets[currentSet + 1]);
+    
+    // Debug current selectedAnswers state
+    console.log('🔍 SELECTED ANSWERS STATE:');
+    console.log('  - Sets with answers:', Object.keys(selectedAnswersBySet));
+    console.log('  - Current set answers count:', Object.keys(currentSetAnswers).length);
+    console.log('  - All answers by set:', selectedAnswersBySet);
+    
+    // Debug current set answers vs all answers
+    const currentSetQuestionIds = currentQuestions.map(q => q.id);
+    console.log('🔍 CURRENT SET ANALYSIS:');
+    console.log('  - Current set question IDs:', currentSetQuestionIds);
+    console.log('  - Answers for current set:', Object.keys(currentSetAnswers));
+    console.log('  - Current set answers object:', currentSetAnswers);
+    
     // Ensure next set is available
     if (!allQuestionSets[currentSet + 1]) {
+      console.log('⏳ Fetching next set because it does not exist');
       await fetchMoreQuestions();
+    } else {
+      console.log('✅ Next set already available');
+    }
+    
+    // Debug next set before moving
+    if (allQuestionSets[currentSet + 1]) {
+      const nextSetQuestions = allQuestionSets[currentSet + 1];
+      console.log('🔍 NEXT SET ANALYSIS:');
+      console.log('  - Next set question count:', nextSetQuestions.length);
+      console.log('  - Next set question IDs:', nextSetQuestions.map(q => q.id));
+      
+      // Check for overlapping questions
+      const overlappingQuestions = nextSetQuestions.filter(q => currentSetQuestionIds.includes(q.id));
+      console.log('  - Overlapping questions with current set:', overlappingQuestions.length);
+      if (overlappingQuestions.length > 0) {
+        console.log('  - Overlapping question IDs:', overlappingQuestions.map(q => q.id));
+        console.log('  - These will show previous answers!');
+      }
+      
+      // Check if next set questions already have answers in the next set's scope
+      const nextSetAnswers = selectedAnswersBySet[currentSet + 1] || {};
+      const nextSetWithExistingAnswers = nextSetQuestions.filter(q => nextSetAnswers[q.id]);
+      console.log('  - Questions in next set with existing answers:', nextSetWithExistingAnswers.length);
+      if (nextSetWithExistingAnswers.length > 0) {
+        console.log('  - Question IDs with existing answers:', nextSetWithExistingAnswers.map(q => q.id));
+        console.log('  - Next set should be FRESH - no pre-existing answers expected!');
+      }
     }
     
     // Move to next set
+    console.log('➡️ Moving to next set:', currentSet + 1);
     setCurrentSet(prev => prev + 1);
     setCurrentQuestionIndex(0);
     setQuizState('question');
+    console.log('🏁 HANDLE NEXT SET - Completed');
   };
 
   const handleQuestionClick = (questionIndex: number) => {
@@ -252,17 +385,25 @@ export default function QuizInterface({
   const handleAnswerSelect = (questionId: string, selectedOption: string) => {
     if (quizState !== 'question') return;
     
-    setSelectedAnswers(prev => ({
+    console.log('📝 ANSWER SELECT:');
+    console.log('  - Set:', currentSet);
+    console.log('  - Question ID:', questionId);
+    console.log('  - Selected option:', selectedOption);
+    
+    setSelectedAnswersBySet(prev => ({
       ...prev,
-      [questionId]: selectedOption
+      [currentSet]: {
+        ...prev[currentSet],
+        [questionId]: selectedOption
+      }
     }));
   };
 
   const handleSubmitAnswer = async () => {
-    if (!currentQuestion || !selectedAnswers[currentQuestion.id]) return;
+    if (!currentQuestion || !currentSetAnswers[currentQuestion.id]) return;
     
     const timeSpent = Math.floor((Date.now() - questionStartTime.current) / 1000);
-    const isCorrect = selectedAnswers[currentQuestion.id] === currentQuestion.correctAnswer;
+    const isCorrect = currentSetAnswers[currentQuestion.id] === currentQuestion.correctAnswer;
     
     // Update session tracking stats
     setTotalAnswered(prev => prev + 1);
@@ -330,7 +471,7 @@ export default function QuizInterface({
         
         <AnswerExplanation
           question={currentQuestion}
-          selectedAnswer={selectedAnswers[currentQuestion.id]}
+          selectedAnswer={currentSetAnswers[currentQuestion.id]}
           onNext={handleNextFromExplanation}
         />
       </div>
@@ -365,14 +506,14 @@ export default function QuizInterface({
       <div className="max-w-4xl mx-auto">
         <QuestionCard
           question={currentQuestion}
-          selectedAnswer={selectedAnswers[currentQuestion.id]}
+          selectedAnswer={currentSetAnswers[currentQuestion.id]}
           onAnswerSelect={(answerId: string) => handleAnswerSelect(currentQuestion.id, answerId)}
         />
         
         <div className="flex justify-center mt-6">
           <button
             onClick={handleSubmitAnswer}
-            disabled={!selectedAnswers[currentQuestion.id]}
+            disabled={!currentSetAnswers[currentQuestion.id]}
             className="px-8 py-4 bg-bittersweet text-white rounded-xl font-bold text-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Submit Answer

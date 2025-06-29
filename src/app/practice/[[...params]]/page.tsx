@@ -110,6 +110,15 @@ async function fetchQuestionsForLevel(
     }
     
     // Use the consolidated function to fetch questions
+    console.log('🔍 CALLING getQuestionsForPractice with:', {
+      level,
+      targetId: target,
+      difficultyRange: [1, 7],
+      limit: 10,
+      excludeAnsweredQuestions: true,
+      userId
+    });
+    
     const questions: Question[] = await getQuestionsForPractice({
       level,
       targetId: target,
@@ -118,6 +127,8 @@ async function fetchQuestionsForLevel(
       excludeAnsweredQuestions: true,
       userId
     }) || [];
+    
+    console.log('📊 getQuestionsForPractice returned:', questions.length, 'questions');
     
     // Transform database questions to match the QuizQuestion interface
     const mappedQuestions = questions.map(q => {
@@ -243,6 +254,12 @@ export default async function PracticePage(props: PracticePageProps) {
   
   console.log('=== FETCHED QUESTIONS ===');
   console.log('Questions count:', questions.length);
+  if (questions.length > 0) {
+    console.log('First question ID:', questions[0].id);
+    console.log('First question type:', questions[0].type);
+    console.log('First question has options:', questions[0].options.length);
+    console.log('Question source types:', [...new Set(questions.map(q => q.id.includes('fallback') ? 'fallback' : 'database'))]);
+  }
   console.log('========================');
 
   // Fallback to generated questions if no database questions available
@@ -264,6 +281,8 @@ export default async function PracticePage(props: PracticePageProps) {
             subjectTitle={title}
             userId={user.id}
             sessionId={session.id}
+            sessionLevel={level}
+            sessionTargetId={target}
           />
         </div>
       </main>
