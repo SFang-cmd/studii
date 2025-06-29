@@ -1,5 +1,5 @@
 import { getSkillHierarchy } from '@/types/sat-structure';
-import { QuizQuestion } from '@/components/quiz/quiz-interface';
+import { QuizQuestion } from '@/components/quiz/quiz-interface-v2';
 import { calculateDomainScore, calculateSubjectScore } from './score-calculations';
 import { UserProgress } from '@/types/user-progress';
 
@@ -97,7 +97,7 @@ export function updateUserProgressWithPoints(
     if (!skillId) return; // Skip questions without a skill ID
     
     const isCorrect = selectedAnswers[question.id] === question.correctAnswer;
-    const pointChange = calculatePointsForQuestion(question.difficulty || 4, isCorrect);
+    const pointChange = calculatePointsForQuestion(question.difficultyBand || 4, isCorrect);
     
     // Get current skill score
     const currentScore = updatedProgress.skillScores[skillId] || 200; // Default to 200 if not found

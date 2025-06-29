@@ -6,6 +6,7 @@ import { getSubjectById, getSkillHierarchy, getDomainHierarchy } from "@/types/s
 import { createClient } from '@/utils/supabase/server'
 import { getQuestionsForPractice } from '@/utils/database'
 import { Question } from '@/types/database'
+import { SupabaseClient } from '@supabase/supabase-js';
 
 // Simple fallback questions when database fetch fails
 const generateFallbackQuestions = (level: string, context?: string): QuizQuestion[] => {
@@ -38,8 +39,19 @@ async function createQuizSession(
   level: 'all' | 'subject' | 'domain' | 'skill',
   target: string,
   userId: string,
-  supabase: any
-): Promise<any> {
+  supabase: SupabaseClient
+): Promise<{
+  id: string;
+  user_id: string;
+  session_type: 'all' | 'subject' | 'domain' | 'skill';
+  target_id: string;
+  start_time: string;
+  end_time: string | null;
+  total_questions: number;
+  questions_answered: number;
+  questions_correct: number;
+  created_at: string;
+} | null> {
   try {
     // Use the level directly as session_type since schema supports 'all'
     const sessionType = level;

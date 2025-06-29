@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { QuizQuestion } from './quiz-interface';
+import { QuizQuestion } from './quiz-interface-v2';
 
 interface AnswerExplanationProps {
   question: QuizQuestion;

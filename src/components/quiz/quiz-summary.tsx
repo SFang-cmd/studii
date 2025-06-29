@@ -1,6 +1,6 @@
 'use client';
 
-import { QuizQuestion } from './quiz-interface';
+import { QuizQuestion } from './quiz-interface-v2';
 
 interface PerformanceMetric {
   id: string;
@@ -33,8 +33,8 @@ export function QuizSummary({
   
   // Group questions by different categories and calculate performance
   const skillMetrics = calculateMetricsByProperty(questions, selectedAnswers, 'skillId', 'skillName');
-  const domainMetrics = calculateMetricsByProperty(questions, selectedAnswers, 'domainId', 'domainName');
-  const subjectMetrics = calculateMetricsByProperty(questions, selectedAnswers, 'subjectId', 'subjectName');
+  const domainMetrics = calculateMetricsByProperty(questions, selectedAnswers, 'domainName', 'domainName');
+  const subjectMetrics = calculateMetricsByProperty(questions, selectedAnswers, 'subjectName', 'subjectName');
   
   // Determine which metrics to show based on quiz type
   // For skill practice: show skill metrics only

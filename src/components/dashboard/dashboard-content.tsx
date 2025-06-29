@@ -5,7 +5,7 @@ import { SubjectCard } from './subject-card';
 import { DomainCard } from './domain-card';
 import { SkillCard } from './skill-card';
 import { DashboardFilter } from './dashboard-filter';
-import { UserProgress } from '@/data/dummy-progress';
+import { UserProgress } from '@/types/user-progress';
 import { calculateSubjectScore } from '@/utils/score-calculations';
 import { SAT_STRUCTURE, SATSubject, getSubjectById } from '@/types/sat-structure';
 

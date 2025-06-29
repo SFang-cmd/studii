@@ -293,7 +293,7 @@ export async function POST() {
         question_text: questionData.question_text,
         question_type: 'mcq',
         skill_id: questionData.skill_id,
-        difficulty_level: questionData.difficulty_level,
+        difficulty: questionData.difficulty_level,
         answer_options: questionData.answer_options,
         correct_answers: questionData.correct_answers,
         explanation: questionData.explanation,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { QuestionCard } from './question-card';
 import { QuizProgressBar } from './quiz-progress-bar';
 import { AnswerExplanation } from './answer-explanation';
@@ -72,7 +72,7 @@ export default function QuizInterface({
   const isLastQuestionInSet = currentQuestionIndex === currentQuestions.length - 1;
   
   // Helper to get current set's answers
-  const currentSetAnswers = selectedAnswersBySet[currentSet] || {};
+  const currentSetAnswers = useMemo(() => selectedAnswersBySet[currentSet] || {}, [selectedAnswersBySet, currentSet]);
   
   // Debug current question state
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { QuizQuestion } from './quiz-interface';
+import { QuizQuestion } from './quiz-interface-v2';
 
 interface QuestionCardProps {
   question: QuizQuestion;

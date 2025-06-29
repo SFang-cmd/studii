@@ -1,6 +1,6 @@
 import { getSkillRankFromPercentage } from '@/utils/rank-system';
 import { SATSkill } from '@/types/sat-structure';
-import { UserProgress } from '@/data/dummy-progress';
+import { UserProgress } from '@/types/user-progress';
 import { getUserSkillScore } from '@/utils/score-calculations';
 import { RankIcon } from '../shared/rank-icon';
 import Link from 'next/link';

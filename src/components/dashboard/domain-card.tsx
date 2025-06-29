@@ -1,7 +1,7 @@
 import { RankIcon } from '../shared/rank-icon';
 import { getDomainRankFromScore } from '@/utils/rank-system';
 import { SATDomain } from '@/types/sat-structure';
-import { UserProgress } from '@/data/dummy-progress';
+import { UserProgress } from '@/types/user-progress';
 import { calculateDomainScore } from '@/utils/score-calculations';
 import Link from 'next/link';
 
