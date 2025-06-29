@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { QuestionCard } from './question-card';
 import { QuizProgressBar } from './quiz-progress-bar';
 import { AnswerExplanation } from './answer-explanation';
@@ -34,12 +35,14 @@ export interface QuizInterfaceProps {
   subject: string;
   subjectTitle: string;
   userId?: string;
+  sessionId?: string;
 }
 
 export default function QuizInterface({
   questions: initialQuestions,
   subjectTitle,
-  userId
+  userId,
+  sessionId
 }: QuizInterfaceProps): React.ReactNode {
   // Core quiz state
   const [currentSet, setCurrentSet] = useState(0);
@@ -52,10 +55,12 @@ export default function QuizInterface({
   const [seenQuestionIds, setSeenQuestionIds] = useState<Set<string>>(new Set());
   const [isLoadingNextSet, setIsLoadingNextSet] = useState(false);
   
-  // Basic tracking (no session persistence)
+  // Session tracking for completion
   const [totalAnswered, setTotalAnswered] = useState(0);
   const [totalCorrect, setTotalCorrect] = useState(0);
   const questionStartTime = useRef<number>(Date.now());
+  const sessionStartTime = useRef<number>(Date.now());
+  const hasSessionCompleted = useRef<boolean>(false);
 
   // Current question data
   const currentQuestions = allQuestionSets[currentSet] || [];
@@ -97,6 +102,214 @@ export default function QuizInterface({
       setSeenQuestionIds(prev => new Set([...prev, currentQuestion.id]));
     }
   }, [currentQuestion]);
+
+  // Session completion function with comprehensive debug logging
+  const completeSession = useCallback(async (isPageUnload = false) => {
+    if (!sessionId || hasSessionCompleted.current) {
+      console.log('🚫 Session completion skipped:', {
+        sessionId: !!sessionId,
+        alreadyCompleted: hasSessionCompleted.current,
+        trigger: isPageUnload ? 'page_unload' : 'manual'
+      });
+      return;
+    }
+
+    hasSessionCompleted.current = true;
+    const currentTime = Date.now();
+    const timeSpentMinutes = Math.round((currentTime - sessionStartTime.current) / 1000 / 60);
+
+    console.log('🏁 STARTING SESSION COMPLETION');
+    console.log('📊 Session completion stats:');
+    console.log('  Session ID:', sessionId);
+    console.log('  User ID:', userId);
+    console.log('  Total Answered:', totalAnswered);
+    console.log('  Total Correct:', totalCorrect);
+    console.log('  Time Spent (minutes):', timeSpentMinutes);
+    console.log('  Current Set:', currentSet);
+    console.log('  Question Index:', currentQuestionIndex);
+    console.log('  Trigger:', isPageUnload ? 'page_unload' : 'manual');
+    console.log('  Timestamp:', new Date().toISOString());
+
+    const sessionData = {
+      sessionId,
+      total_questions: totalAnswered,
+      correct_answers: totalCorrect,
+      time_spent_minutes: timeSpentMinutes
+    };
+
+    try {
+      if (isPageUnload && navigator.sendBeacon) {
+        // Use sendBeacon for page unload (more reliable)
+        console.log('📡 Using sendBeacon for session completion');
+        const success = navigator.sendBeacon(
+          '/api/complete-session',
+          JSON.stringify(sessionData)
+        );
+        console.log('📡 sendBeacon result:', success ? 'SUCCESS' : 'FAILED');
+      } else {
+        // Use regular fetch for manual completion
+        console.log('🔄 Using fetch for session completion');
+        const response = await fetch('/api/complete-session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(sessionData),
+        });
+
+        const result = await response.json();
+        
+        if (response.ok) {
+          console.log('✅ Session completed successfully via fetch');
+          console.log('📈 API Response:', result);
+        } else {
+          console.log('❌ Session completion failed via fetch');
+          console.log('📉 Error Response:', result);
+        }
+      }
+    } catch (error) {
+      console.log('💥 Error completing session:');
+      console.log('  Error:', error);
+      console.log('  Stack:', error instanceof Error ? error.stack : 'No stack trace');
+    }
+  }, [sessionId, userId, totalAnswered, totalCorrect, currentSet, currentQuestionIndex]);
+
+  // Setup session completion handlers - only for actual navigation/closure
+  useEffect(() => {
+    console.log('🔧 Setting up session completion handlers for sessionId:', sessionId);
+    
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      console.log('⚠️ BEFOREUNLOAD EVENT TRIGGERED');
+      console.log('  Event type:', event.type);
+      console.log('  Session ID:', sessionId);
+      console.log('  Current stats:', {
+        totalAnswered,
+        totalCorrect,
+        currentSet,
+        currentQuestionIndex
+      });
+      
+      // This fires on:
+      // - Tab/window close
+      // - Page refresh (F5, Ctrl+R)
+      // - Navigation to different URL
+      // - Browser close
+      console.log('🚪 Page is actually unloading - completing session');
+      completeSession(true);
+    };
+
+    const handlePageHide = () => {
+      console.log('🫥 PAGEHIDE EVENT TRIGGERED');
+      console.log('  Session ID:', sessionId);
+      console.log('  Current stats:', {
+        totalAnswered,
+        totalCorrect,
+        currentSet,
+        currentQuestionIndex
+      });
+      
+      // This is more reliable than beforeunload for detecting actual page unload
+      // It fires when the page is truly being removed from memory
+      console.log('🚪 Page is being hidden/unloaded - completing session');
+      completeSession(true);
+    };
+
+    // Add event listeners - using both for maximum reliability
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
+
+    // Cleanup function
+    return () => {
+      console.log('🧹 Cleaning up session completion handlers for sessionId:', sessionId);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [sessionId, completeSession, totalAnswered, totalCorrect, currentSet, currentQuestionIndex]);
+
+  // Monitor page visibility for debugging only (no session completion)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      console.log('👁️ VISIBILITY CHANGE EVENT (debug only)');
+      console.log('  Document hidden:', document.hidden);
+      console.log('  Visibility state:', document.visibilityState);
+      console.log('  Session continues - not ending session on tab switch');
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // Handle client-side navigation away from practice page
+  useEffect(() => {
+    const handleRouteChange = () => {
+      console.log('🧭 CLIENT-SIDE NAVIGATION DETECTED');
+      console.log('  Current URL:', window.location.href);
+      console.log('  Session ID:', sessionId);
+      
+      // Complete session when navigating away from practice page
+      if (sessionId && !hasSessionCompleted.current) {
+        console.log('🚪 Navigating away from practice page - completing session');
+        completeSession(false); // Use regular fetch since we're not in beforeunload
+      }
+    };
+
+    // Listen for clicks on navigation elements
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      
+      // Check if clicked element or its parent is a navigation link
+      const navLink = target.closest('a[href], button[type="button"]');
+      if (navLink) {
+        const href = navLink.getAttribute('href');
+        const isExternalNavigation = href && !href.startsWith('/practice');
+        
+        if (isExternalNavigation) {
+          console.log('🔗 Navigation link clicked:', href);
+          console.log('  Session ID:', sessionId);
+          
+          if (sessionId && !hasSessionCompleted.current) {
+            console.log('🚪 Navigation away detected - completing session');
+            completeSession(false);
+          }
+        }
+      }
+    };
+
+    // Add click listener to document to catch all navigation clicks
+    document.addEventListener('click', handleClick, true); // Use capture phase
+
+    return () => {
+      document.removeEventListener('click', handleClick, true);
+    };
+  }, [sessionId, completeSession]);
+
+  // Monitor for URL changes (as backup for missed navigation)
+  useEffect(() => {
+    const currentUrl = window.location.href;
+    console.log('📍 URL monitoring setup for:', currentUrl);
+
+    // Check if we're still on a practice page
+    const checkUrlChange = () => {
+      const newUrl = window.location.href;
+      if (newUrl !== currentUrl && !newUrl.includes('/practice')) {
+        console.log('🌐 URL changed away from practice:', currentUrl, '→', newUrl);
+        if (sessionId && !hasSessionCompleted.current) {
+          console.log('🚪 URL change detected - completing session');
+          completeSession(false);
+        }
+      }
+    };
+
+    // Check URL periodically as a fallback
+    const urlCheckInterval = setInterval(checkUrlChange, 1000);
+
+    return () => {
+      clearInterval(urlCheckInterval);
+    };
+  }, [sessionId, completeSession]);
   
   // Fetch next question set - simplified without session
   const fetchMoreQuestions = useCallback(async () => {
@@ -178,10 +391,27 @@ export default function QuizInterface({
     const timeSpent = Math.floor((Date.now() - questionStartTime.current) / 1000);
     const isCorrect = selectedAnswers[currentQuestion.id] === currentQuestion.correctAnswer;
     
-    // Update basic stats (no persistence)
-    setTotalAnswered(prev => prev + 1);
+    console.log('📝 ANSWER SUBMITTED');
+    console.log('  Question ID:', currentQuestion.id);
+    console.log('  Selected Answer:', selectedAnswers[currentQuestion.id]);
+    console.log('  Correct Answer:', currentQuestion.correctAnswer);
+    console.log('  Is Correct:', isCorrect);
+    console.log('  Time Spent (seconds):', timeSpent);
+    console.log('  Session ID:', sessionId);
+    
+    // Update session tracking stats
+    setTotalAnswered(prev => {
+      const newTotal = prev + 1;
+      console.log('📊 Total Answered updated:', prev, '→', newTotal);
+      return newTotal;
+    });
+    
     if (isCorrect) {
-      setTotalCorrect(prev => prev + 1);
+      setTotalCorrect(prev => {
+        const newTotal = prev + 1;
+        console.log('✅ Total Correct updated:', prev, '→', newTotal);
+        return newTotal;
+      });
     }
     
     // Answer recording removed - will be reimplemented later

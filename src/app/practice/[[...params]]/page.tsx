@@ -28,6 +28,43 @@ const generateFallbackQuestions = (level: string, context?: string): QuizQuestio
 };
 
 /**
+ * Server-side function to create a quiz session
+ * @param level - The level of practice (all, subject, domain, or skill)
+ * @param target - The target identifier (subject ID, domain ID, or skill ID)
+ * @param userId - The user's ID for the session
+ * @returns The created session object
+ */
+async function createQuizSession(
+  level: 'all' | 'subject' | 'domain' | 'skill',
+  target: string,
+  userId: string,
+  supabase: any
+): Promise<any> {
+  try {
+    // Use the level directly as session_type since schema supports 'all'
+    const sessionType = level;
+    const targetId = target;
+    
+    const { data: sessions, error } = await supabase
+      .rpc('create_quiz_session', {
+        p_user_id: userId,
+        p_session_type: sessionType,
+        p_target_id: targetId
+      });
+
+    if (error) {
+      console.error('Error creating session:', error);
+      return null;
+    }
+
+    return sessions?.[0] || null;
+  } catch (error) {
+    console.error('Error in createQuizSession:', error);
+    return null;
+  }
+}
+
+/**
  * Server-side function to fetch questions directly from database
  * @param level - The level of practice (all, subject, domain, or skill)
  * @param target - The target identifier (subject ID, domain ID, or skill ID)
@@ -181,15 +218,27 @@ export default async function PracticePage(props: PracticePageProps) {
     notFound();
   }
 
-  // Session tracking removed - will be reimplemented later if needed
-
-  // Fetch questions from database
+  // Create quiz session
   console.log('=== PRACTICE PAGE DEBUG ===');
   console.log('Level:', level);
   console.log('Target:', target);
   console.log('User ID:', user.id);
   console.log('========================');
   
+  const session = await createQuizSession(level, target, user.id, supabase);
+  
+  if (!session) {
+    console.error('Failed to create quiz session');
+    notFound();
+  }
+  
+  console.log('=== CREATED SESSION ===');
+  console.log('Session ID:', session.id);
+  console.log('Session Type:', session.session_type);
+  console.log('Target ID:', session.target_id);
+  console.log('======================');
+
+  // Fetch questions from database
   const { questions, contextName, title } = await fetchQuestionsForLevel(level, target, user.id);
   
   console.log('=== FETCHED QUESTIONS ===');
@@ -214,6 +263,7 @@ export default async function PracticePage(props: PracticePageProps) {
             subject={level === 'subject' && target ? target : 'all'}
             subjectTitle={title}
             userId={user.id}
+            sessionId={session.id}
           />
         </div>
       </main>

@@ -1,367 +1,435 @@
-# Technical Insights from Studii SAT Prep App Development
-
-## Architecture Evolution and Lessons Learned
-
-### Database Design and Normalization Strategy
-
-**Challenge**: Balancing database normalization with query performance for real-time SAT scoring calculations.
-
-**Approach**: Implemented a skill-centric data model where skills are atomic units (200-800 SAT scale), with domains and subjects calculated dynamically. This avoided over-normalization while maintaining data integrity.
-
-**Key Decisions**:
-- User progress stored at skill level only (35+ skills per user)
-- Domain/subject scores calculated on-demand rather than stored
-- Auto-initialization at SAT minimum (200 points) for new skills
-- Weighted calculations using real SAT test percentages
-
-**Impact**: Reduced database complexity while enabling flexible scoring algorithms and real-time progress tracking.
-
-### TypeScript Integration Challenges
-
-**Challenge**: Maintaining type safety across a complex full-stack application with dynamic data structures.
-
-**Technical Solutions**:
-- Created comprehensive database type definitions using Supabase's generated types
-- Implemented strict TypeScript mode with path aliases (`@/*` → `./src/*`)
-- Used discriminated unions for quiz question types and session states
-- Built type-safe database utility functions with proper error handling
-
-**Specific Issues Resolved**:
-- UUID vs number type mismatches in question IDs
-- Interface consistency between database models and frontend components
-- Proper typing for JSONB fields (answer_options, question metadata)
-
-### Next.js 15 Migration and Dynamic Routes
-
-**Challenge**: Upgrading to Next.js 15 while maintaining backward compatibility and implementing dynamic routes.
-
-**Technical Implementation**:
-- Migrated to async params pattern: `await params` for dynamic routes
-- Used `[[...params]]` catch-all routing for flexible practice URLs
-- Implemented SSR-compatible authentication with middleware-only auth
-
-**Performance Optimizations**:
-- Server-side rendering for SEO and initial load performance
-- Component lazy loading with organized index.ts files
-- On-demand score calculations instead of heavy enrichment objects
-
-### Session Management Architecture (Failed Attempt)
-
-**Initial Approach**: Complex session tracking with URL parameters, database persistence, and React cleanup functions.
-
-**Problems Encountered**:
-- Component re-renders triggered premature session completion
-- URL parameter handling created race conditions
-- SQL function parameter mismatches
-- Over-engineered persistence mechanisms interfered with React lifecycle
-
-**Lessons Learned**:
-- React cleanup functions should not handle business logic
-- URL state management adds unnecessary complexity
-- Simple solutions often outperform complex ones
-- Database design should prioritize debugging and maintenance
-
-**Solution**: Complete removal and planned reimplementation with page lifecycle management.
-
-### SAT API Integration and Data Mapping
-
-**Challenge**: Integrating with official SAT question bank API while maintaining data fidelity.
-
-**Technical Approach**:
-- Built comprehensive skill code mapping system (SAT codes → internal IDs)
-- Preserved SAT's native 1-7 difficulty scale for maximum fidelity
-- Implemented rich HTML support for complex question content (SVG, tables, equations)
-- Created origin tracking system for content management
-
-**Data Transformation Pipeline**:
-1. Fetch question metadata from SAT API
-2. Check for duplicates using external IDs
-3. Map SAT skill codes to internal skill structure
-4. Import with automatic type conversion and validation
-5. Store with database constraints for data integrity
-
-### Component State Management Strategy
-
-**Challenge**: Managing quiz state across multiple question sets without page refreshes.
-
-**SPA Architecture**:
-- Essential state only: current set, question index, selected answers
-- Dynamic question loading with prefetching
-- Minimal client state with server-side logic
-- Fallback question generation for testing
-
-**State Optimization**:
-- Eliminated redundant answer tracking mechanisms
-- Simplified component interfaces and prop passing
-- Removed complex useEffect chains and dependency management
-- Implemented seen question deduplication in memory
-
-### Database Query Optimization
-
-**Challenge**: Efficient question fetching with exclusion lists and difficulty filtering.
-
-**Solutions Implemented**:
-- PostgreSQL stored procedures for complex query logic
-- Parameterized queries with proper indexing
-- Question exclusion handling for practice continuity
-- Difficulty band filtering using native SAT scale
-
-**Performance Considerations**:
-- Query performance monitoring for large excluded question lists
-- Memory management for multiple loaded question sets
-- Graceful fallback when database queries fail
-
-### Authentication and Security
-
-**Implementation**: Supabase authentication with SSR support and middleware-only auth handling.
-
-**Security Measures**:
-- Row Level Security policies for all database tables
-- Server-side session validation
-- Protected route middleware
-- Secure cookie handling for authentication state
-
-**OAuth Integration**:
-- Google and Facebook OAuth with proper provider configuration
-- Template pattern for extensible OAuth providers
-- Error handling and user-friendly feedback
-
-### React Component Architecture
-
-**Design Principles**:
-- Grouped components by use-case (dashboard/, quiz/, shared/)
-- Single responsibility principle for component functions
-- Consistent prop interfaces with TypeScript
-- Separation of presentation and business logic
-
-**Performance Patterns**:
-- useCallback for expensive operations
-- Memoization for complex calculations
-- Efficient re-render patterns
-- Clean dependency arrays
-
-### Error Handling and Debugging Strategy
-
-**Approach**: Comprehensive error boundaries with graceful degradation.
-
-**Implementation**:
-- Try-catch blocks around all database operations
-- Fallback UI components for API failures
-- Detailed logging for debugging complex state transitions
-- User-friendly error messages with actionable guidance
-
-**Monitoring Strategy**:
-- Console logging for development debugging
-- Error tracking for production issues
-- Performance monitoring for query optimization
-
-### Deployment and DevOps Considerations
-
-**Technology Stack**:
-- Next.js 15 with Turbopack for development
-- Supabase for backend services and database
-- Vercel for hosting and deployment
-- ESLint and TypeScript for code quality
-
-**Development Workflow**:
-- Hot reloading with Turbopack for fast development cycles
-- Type checking integrated into build process
-- Git workflow with descriptive commit messages
-- Documentation-driven development approach
-
-### Scalability and Future Architecture
-
-**Current Limitations**:
-- No caching layer for calculated scores
-- Client-side only session state management
-- Single database instance without sharding
-
-**Planned Improvements**:
-- Redis caching for frequent score calculations
-- Background job processing for data updates
-- CDN integration for static content delivery
-- Microservices architecture for specific domains
-
-### Testing Strategy and Quality Assurance
-
-**Current State**: Manual testing with fallback question generation for development.
-
-**Planned Testing Infrastructure**:
-- Unit tests for utility functions and calculations
-- Integration tests for API endpoints
-- End-to-end tests for critical user flows
-- Performance testing for database queries
-
-**Quality Metrics**:
-- TypeScript strict mode compliance
-- ESLint rule adherence
-- Component interface consistency
-- Database query performance monitoring
-
-2. **Error Handling Across Boundaries**
-   - Server errors need to be properly serialized when crossing to the client
-   - Client errors need appropriate fallbacks when server communication fails
-   - Solution: Standardized error response format and implemented graceful degradation
-
-## Architecture and Design Patterns
-
-### Client-Server Responsibility Separation
-One of the most impactful architectural decisions was clearly separating client and server responsibilities. By moving time-sensitive operations like session tracking to the database layer using PostgreSQL functions, we achieved more accurate and reliable data while reducing client-side complexity.
-
-### Hybrid Rendering Approach
-The application benefits significantly from a hybrid rendering approach:
-- **Server Components**: Handle data fetching, authentication, and initial page loads
-- **Client Components**: Manage interactive UI elements that require frequent state updates
-
-This pattern provides the best of both worlds: SEO-friendly content with server components and responsive interactions with client components.
-
-## Session Management Insights
-
-### Database-Driven Time Tracking
-Moving time tracking logic from the client to PostgreSQL functions revealed several advantages:
-- Consistent timestamps regardless of client-side clock accuracy
-- Reliable session duration calculations even with network interruptions
-
-### Secure Session Continuity
-Implementing a secure session management system for continuous quiz flow presented several interesting challenges:
-
-1. **State Persistence Across Page Reloads**
-   - Using URL parameters to maintain session state provides a simple yet effective solution
-   - This approach avoids the complexity of client-side state management libraries
-   - Enables seamless continuation of quiz sessions even after page refreshes
-
-2. **Security Considerations in Session Handling**
-   - Server-side validation ensures session IDs can only be used by their rightful owners
-   - This prevents session hijacking even if session IDs are exposed in URLs
-   - The tradeoff between security and simplicity is managed through validation rather than complex encryption
-
-3. **Hybrid Security Model**
-   - Leveraging server components for security-critical operations like session validation
-   - Using client components for interactive UI elements and navigation
-   - This separation of concerns aligns with security best practices while maintaining good UX
-- Simplified client code by removing time calculation responsibilities
-
-### Graceful Session Completion
-Implementing multiple layers of session completion protection taught me the importance of defensive programming:
-- Using `navigator.sendBeacon()` for reliable data transmission during page unload
-- Creating dedicated lightweight API endpoints for specific use cases
-- Implementing fallback mechanisms for edge cases
-
-This approach ensures data integrity even in unpredictable browser environments.
-
-## React and Next.js Patterns
-
-### Server Actions vs. API Routes
-The project revealed important insights about when to use each approach:
-
-1. **Server Actions**
-   - Pros: Tightly integrated with React Server Components, reduced client-server code
-   - Cons: Only work in App Router, cannot be imported in client components or Pages Router
-   - Best for: Server-only operations in App Router contexts
-
-2. **API Routes**
-   - Pros: Universal compatibility across App Router and Pages Router
-   - Cons: More boilerplate, separate from component code
-   - Best for: Operations that need to work across routing paradigms
-
-3. **Hybrid Approach**
-   - Server actions can internally call API routes when needed
-   - API routes can use the same database utility functions as server actions
-   - This creates a flexible architecture that works in all contexts
-
-### State Management Optimization
-The quiz interface implementation demonstrated the importance of thoughtful state management:
-- Using `useCallback` for functions passed to effect dependencies
-- Properly structuring dependency arrays in `useEffect` hooks
-- Balancing between prop drilling and context for state sharing
-
-These practices significantly improved component performance and maintainability.
-
-### Server Actions vs. API Routes
-Working with Next.js 13+ App Router revealed the tradeoffs between server actions and API routes:
-- **Server Actions**: Ideal for authenticated, standard operations with tight component integration
-- **API Routes**: Better for specialized endpoints with unique requirements (like beacon requests)
-
-This hybrid approach provides flexibility while maintaining code organization.
-
-## User Experience Considerations
-
-### Non-Blocking Operations
-Implementing session tracking taught me to prioritize non-blocking operations:
-- Avoiding confirmation dialogs when not necessary
-- Using asynchronous operations for background tasks
-- Ensuring UI remains responsive during data operations
-
-These practices create a smoother, more app-like experience for users.
-
-### Progressive Enhancement
-The application implements progressive enhancement by:
-- Ensuring core functionality works even if JavaScript fails
-- Providing graceful fallbacks for features like session tracking
-- Handling edge cases like network interruptions or page unloads
-
-This approach makes the application more resilient and accessible to all users.
-
-## Session Management Challenges
-
-### Time Tracking Across Components
-Implementing accurate time tracking in a hybrid architecture presented unique challenges:
-
-1. **Client-Side Time Calculation**
-   - Using `Date.now()` in React components for elapsed time calculation
-   - Storing timestamps in refs to prevent unnecessary re-renders
-   - Converting milliseconds to minutes for database storage
-
-2. **Server-Side Verification**
-   - Using database timestamps for official session duration records
-   - Implementing server-side validation of client-reported times
-   - Creating a reliable system that works even with network interruptions
-
-### API Design for Session Updates
-The session update and completion API endpoints required careful design:
-
-1. **Minimal Payload Design**
-   - Sending only essential data (sessionId, totalQuestions, correctAnswers)
-   - Using JSON for structured data transmission
-   - Implementing proper error handling for failed requests
-
-2. **Progressive Enhancement**
-   - Primary update mechanism via standard fetch API
-   - Fallback to navigator.sendBeacon for page unload scenarios
-   - Multiple update mechanisms ensure session data is never lost
-
-## Database Design Insights
-
-### Function-Based Database Logic
-Moving business logic to database functions provided several benefits:
-- Centralized data validation and processing
-- Reduced network traffic between client and server
-- Improved security through `SECURITY DEFINER` functions
-
-This pattern is particularly valuable for operations that require atomic transactions or precise timing.
-
-### Optimistic Updates
-Implementing optimistic UI updates while ensuring data consistency taught me to:
-- Update the UI immediately for perceived performance
-- Queue background synchronization with the server
-- Handle conflict resolution when server and client states diverge
-
-This pattern significantly improves perceived performance while maintaining data integrity.
-
-## Testing and Monitoring Considerations
-
-### Edge Case Testing
-The session tracking implementation highlighted the importance of testing edge cases:
-- Browser navigation behaviors (back button, refresh, tab close)
-- Network interruptions during critical operations
-- Concurrent operations from multiple tabs or devices
-
-These scenarios often reveal subtle bugs that wouldn't appear in standard testing.
-
-### Telemetry and Logging
-Implementing proper logging for session tracking revealed the value of:
-- Structured logging for easier analysis
-- Capturing context with each log entry
-- Distinguishing between expected and unexpected failures
-
-This approach makes troubleshooting much more efficient in production environments.
+# Technical Insights and Problem-Solving Approaches
+
+This document captures the technical challenges encountered during the Studii project development and the strategic approaches used to overcome them. These insights demonstrate problem-solving methodologies, architectural decision-making, and the evolution of complex system design.
+
+## Session Management Architecture Implementation (January 2025)
+
+### Challenge: Designing Robust Session Lifecycle Management
+
+**Problem Context:**
+The application required a reliable session tracking system that could handle various user behaviors - from normal quiz completion to unexpected navigation, tab switching, and browser closure. Previous implementations suffered from premature session termination and complex state management.
+
+**Architectural Challenge:**
+Creating a session system that accurately detects actual user intent (leaving vs temporarily switching tabs) while maintaining data integrity and user experience.
+
+**Solution Strategy:**
+
+**Multi-Layer Detection System:**
+Instead of relying on a single event, implemented multiple complementary detection mechanisms:
+
+1. **Page Unload Detection**: `beforeunload` and `pagehide` events for actual navigation
+2. **Client-Side Navigation Detection**: Click event monitoring for SPA navigation  
+3. **URL Change Monitoring**: Polling-based fallback for missed navigation events
+4. **Visibility Change Monitoring**: Debugging-only to distinguish tab switches from actual exits
+
+**Implementation Pattern:**
+```typescript
+// Comprehensive session completion detection
+useEffect(() => {
+  // 1. Actual page unload (tab close, refresh, navigation)
+  const handleBeforeUnload = () => completeSession(true);
+  const handlePageHide = () => completeSession(true);
+  
+  // 2. Client-side navigation (navbar clicks, button navigation)
+  const handleClick = (event) => {
+    const navLink = event.target.closest('a[href], button[type="button"]');
+    if (navLink?.href && !navLink.href.startsWith('/practice')) {
+      completeSession(false);
+    }
+  };
+  
+  // 3. URL change monitoring (backup detection)
+  const urlCheck = setInterval(() => {
+    if (!window.location.href.includes('/practice')) {
+      completeSession(false);
+    }
+  }, 1000);
+  
+  // Event listeners with proper cleanup
+  window.addEventListener('beforeunload', handleBeforeUnload);
+  window.addEventListener('pagehide', handlePageHide);
+  document.addEventListener('click', handleClick, true);
+  
+  return () => {
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+    window.removeEventListener('pagehide', handlePageHide);
+    document.removeEventListener('click', handleClick, true);
+    clearInterval(urlCheck);
+  };
+}, [completeSession]);
+```
+
+**Strategic Decision Process:**
+1. **Analyzed User Behavior Patterns**: Identified different types of page exits
+2. **Evaluated Detection Reliability**: Tested various browser events and their trigger conditions
+3. **Implemented Redundant Systems**: Multiple detection layers to ensure no session is lost
+4. **Optimized for User Intent**: Distinguished between temporary tab switches and actual exits
+
+**Benefits Achieved:**
+- **Accurate Detection**: Sessions end only when users actually leave or navigate away
+- **User Experience**: No interruptions for tab switching or window minimization
+- **Data Integrity**: All sessions properly recorded with accurate completion stats
+- **Debugging Capability**: Comprehensive logging for troubleshooting edge cases
+
+### Challenge: Implementing Reliable Session Data Transmission
+
+**Problem Context:**
+Session completion needed to work reliably even during page unload scenarios where normal HTTP requests might be interrupted or cancelled by the browser.
+
+**Technical Solution:**
+Implemented a dual-transmission approach optimized for different scenarios:
+
+```typescript
+const completeSession = useCallback(async (isPageUnload = false) => {
+  const sessionData = {
+    sessionId,
+    total_questions: totalAnswered,
+    correct_answers: totalCorrect,
+    time_spent_minutes: Math.round((Date.now() - sessionStartTime.current) / 60000)
+  };
+
+  if (isPageUnload && navigator.sendBeacon) {
+    // Reliable transmission during page unload
+    const success = navigator.sendBeacon(
+      '/api/complete-session',
+      JSON.stringify(sessionData)
+    );
+  } else {
+    // Standard fetch for normal completion
+    await fetch('/api/complete-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sessionData)
+    });
+  }
+}, [sessionId, totalAnswered, totalCorrect]);
+```
+
+**Key Design Decisions:**
+- **sendBeacon for Page Unload**: Ensures data transmission even if page is being destroyed
+- **Regular Fetch for Normal Use**: Better error handling and response processing
+- **Duplicate Prevention**: Session completion flag prevents multiple submissions
+- **Graceful Degradation**: Functions work even if sendBeacon is unavailable
+
+## Database-Driven Session Architecture
+
+### Challenge: Ensuring Session Data Integrity and Security
+
+**Problem Context:**
+Session management required secure, scalable database design that could handle concurrent users while maintaining data integrity and preventing unauthorized access.
+
+**Strategic Solution:**
+
+**SQL Function-Based Architecture:**
+```sql
+-- Session creation with built-in security
+CREATE OR REPLACE FUNCTION create_quiz_session(
+  p_user_id UUID,
+  p_session_type TEXT,
+  p_target_id TEXT
+) RETURNS TABLE (...) 
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  INSERT INTO quiz_sessions (user_id, session_type, target_id, started_at, ...)
+  VALUES (p_user_id, p_session_type, p_target_id, NOW(), ...)
+  RETURNING *;
+END;
+$$;
+```
+
+**Security Implementation:**
+- **Row Level Security (RLS)**: Users can only access their own sessions
+- **SECURITY DEFINER Functions**: Controlled database access with elevated privileges
+- **Parameter Validation**: Database constraints ensure data integrity
+- **Authentication Integration**: Server-side user validation before database operations
+
+**Benefits Realized:**
+- **Scalability**: Database handles concurrent session operations efficiently
+- **Security**: RLS prevents session hijacking or unauthorized access
+- **Consistency**: Atomic operations ensure data integrity
+- **Performance**: Direct SQL operations reduce API overhead
+
+### Challenge: TypeScript Integration with Complex Database Operations
+
+**Problem Context:**
+Maintaining type safety across database operations, API endpoints, and React components while handling dynamic session data and user interactions.
+
+**Type-Safe Implementation Strategy:**
+
+**Database Type Definitions:**
+```typescript
+// Comprehensive session interface
+interface QuizSession {
+  id: string;
+  user_id: string;
+  session_type: 'all' | 'subject' | 'domain' | 'skill';
+  target_id: string;
+  started_at: string;
+  completed_at?: string;
+  total_questions: number;
+  correct_answers: number;
+  time_spent_minutes: number;
+  is_completed: boolean;
+}
+
+// API response typing
+interface SessionCreationResponse {
+  session: QuizSession;
+  debug?: {
+    processingTime: number;
+    timestamp: string;
+  };
+}
+```
+
+**Component Integration:**
+```typescript
+// Strict prop interfaces for session data
+interface QuizInterfaceProps {
+  questions: QuizQuestion[];
+  subject: string;
+  subjectTitle: string;
+  userId?: string;
+  sessionId?: string; // Added for session integration
+}
+```
+
+**Type Safety Benefits:**
+- **Compile-Time Validation**: TypeScript catches session data mismatches
+- **Intellisense Support**: Better developer experience with autocomplete
+- **Refactoring Safety**: Changes to session structure caught across codebase
+- **Documentation**: Types serve as living documentation of data contracts
+
+## Single Page Application (SPA) State Management
+
+### Challenge: Managing Complex Quiz State Without Performance Degradation
+
+**Problem Context:**
+The quiz interface needed to handle multiple concurrent concerns: question progression, answer tracking, session statistics, and user interactions, all while maintaining responsive performance.
+
+**State Architecture Solution:**
+
+**Minimal Essential State:**
+```typescript
+// Core quiz state - eliminated redundancy
+const [currentSet, setCurrentSet] = useState(0);
+const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+const [quizState, setQuizState] = useState<'question' | 'explanation' | 'summary'>('question');
+const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
+
+// Session tracking - atomic counters
+const [totalAnswered, setTotalAnswered] = useState(0);
+const [totalCorrect, setTotalCorrect] = useState(0);
+const sessionStartTime = useRef<number>(Date.now());
+```
+
+**Performance Optimizations:**
+- **useCallback for Functions**: Prevented unnecessary re-renders
+- **useRef for Timers**: Avoided state updates for timing calculations
+- **Minimal Dependency Arrays**: Reduced useEffect trigger frequency
+- **State Normalization**: Eliminated duplicate data storage
+
+**Component Responsibility Separation:**
+- **Quiz Interface**: Manages essential state and user interactions
+- **Child Components**: Receive computed props, no complex state management
+- **API Layer**: Handles data transformation and persistence
+- **Database Layer**: Stores only essential data with computed aggregates
+
+### Challenge: Component Interface Simplification
+
+**Problem Context:**
+Previous component interfaces had grown complex with multiple prop chains, callback functions, and state synchronization requirements that made the codebase hard to maintain and debug.
+
+**Simplification Strategy:**
+
+**Before (Complex Interface):**
+```typescript
+interface QuizSummaryProps {
+  userProgress?: UserProgress;
+  pointChanges?: RankPointChanges;
+  onUpdateProgress?: (progress: UserProgress, changes: RankPointChanges) => void;
+  loadingError?: string | null;
+  accumulatedPoints?: Record<string, number>;
+  sessionStats?: SessionStatistics;
+  questionMetrics?: QuestionMetrics[];
+  // ... 8+ more props
+}
+```
+
+**After (Simplified Interface):**
+```typescript
+interface QuizSummaryProps {
+  questions: QuizQuestion[];
+  currentSet: number;
+  selectedAnswers: Record<string, string>;
+  onNextSet: () => void;
+  isLoadingNextSet?: boolean;
+}
+```
+
+**Simplification Benefits:**
+- **Reduced Coupling**: Components less dependent on parent state structure
+- **Easier Testing**: Fewer props to mock and validate
+- **Better Performance**: Fewer prop changes trigger re-renders
+- **Improved Debugging**: Clearer data flow and dependencies
+
+## API Design and Error Handling Patterns
+
+### Challenge: Building Robust API Integration for Real-Time Operations
+
+**Problem Context:**
+Session operations needed to work reliably during various network conditions and user behaviors while providing comprehensive debugging information.
+
+**API Design Strategy:**
+
+**Comprehensive Error Handling:**
+```typescript
+export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  
+  try {
+    console.log('=== SESSION COMPLETION DEBUG START ===');
+    
+    // User authentication with detailed logging
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.log('❌ Authentication failed:', userError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    // Request validation with comprehensive logging
+    const { sessionId, total_questions, correct_answers, time_spent_minutes } = await request.json();
+    console.log('📝 Session completion parameters:', {
+      sessionId, total_questions, correct_answers, time_spent_minutes
+    });
+    
+    // Database operation with error context
+    const { data: sessions, error: sessionError } = await supabase.rpc('complete_quiz_session', {
+      p_session_id: sessionId,
+      p_total_questions: total_questions || 0,
+      p_correct_answers: correct_answers || 0,
+      p_time_spent_minutes: time_spent_minutes || 0
+    });
+    
+    if (sessionError) {
+      console.log('❌ Database operation failed:', {
+        message: sessionError.message,
+        details: sessionError.details,
+        code: sessionError.code
+      });
+      return NextResponse.json({ error: 'Database operation failed' }, { status: 500 });
+    }
+    
+    const processingTime = Date.now() - startTime;
+    console.log('✅ Session completed successfully in', processingTime, 'ms');
+    
+    return NextResponse.json({ session: sessions[0], debug: { processingTime } });
+    
+  } catch (error) {
+    console.log('💥 Critical error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+```
+
+**Error Handling Benefits:**
+- **Debugging Visibility**: Comprehensive logging for troubleshooting
+- **Error Context**: Detailed error information for different failure scenarios
+- **Performance Monitoring**: Processing time tracking for optimization
+- **User Experience**: Appropriate error responses without exposing internal details
+
+### Challenge: Database UUID Type System Integration
+
+**Problem Context:**
+The application required seamless integration between PostgreSQL UUID primary keys and JavaScript/TypeScript frontend code that was originally designed for numeric IDs.
+
+**Root Cause Analysis:**
+The issue originated from multiple data transformation layers making inconsistent assumptions:
+1. **Database Layer**: Questions stored with UUID primary keys
+2. **API Layer**: Functions converting UUIDs to numbers for "simpler" frontend handling
+3. **Frontend Layer**: Components expecting numeric IDs
+4. **Fallback Systems**: Generated questions using random numbers instead of UUID-format strings
+
+**Systematic Solution:**
+
+**Step 1: Establish Single Source of Truth**
+```typescript
+// Before: Inconsistent type conversion
+id: typeof q.id === 'number' ? q.id : parseInt(q.id) || Math.floor(Math.random() * 10000)
+
+// After: Consistent UUID preservation
+id: q.id  // Preserve original UUID string throughout system
+```
+
+**Step 2: Fallback System Alignment**
+```typescript
+// Generate UUID-compatible string IDs for fallbacks
+id: `fallback-${level}-${target}-${i + 1}`  // Instead of random numbers
+```
+
+**Step 3: Database Recording Logic**
+```typescript
+// Skip recording for fallback questions
+if (!currentQuestion.id.includes('fallback')) {
+  await recordAnswer(questionId, answerData);
+}
+```
+
+**Lessons Learned:**
+- **Type Consistency**: Must be maintained throughout the entire data pipeline
+- **Conversion Complexity**: Converting between types often creates more problems than it solves
+- **Error Message Analysis**: Database type errors often indicate frontend architectural issues
+- **Systematic Approach**: Fixing type issues requires comprehensive pipeline analysis
+
+## Development Methodology and Problem-Solving Patterns
+
+### Systematic Problem-Solving Approach
+
+**Root Cause Analysis Over Quick Fixes:**
+When encountering complex bugs, the methodology always prioritized understanding over speed:
+
+1. **Complete Data Flow Tracing**: Map every transformation point from database to UI
+2. **Assumption Identification**: Find where code assumes certain data formats or behaviors
+3. **Systematic Solution Design**: Address architectural issues rather than symptoms
+4. **Validation Implementation**: Ensure fixes don't introduce new problems
+
+**Progressive Complexity Management:**
+Rather than attempting to solve all problems simultaneously:
+1. **Stable Foundation First**: Establish core types and basic functionality
+2. **Incremental Enhancement**: Add complexity one layer at a time
+3. **Continuous Validation**: Test each layer before building the next
+4. **Backward Compatibility**: Maintain stability during transitions
+
+### Documentation-Driven Development
+
+**Architectural Decision Documentation:**
+Complex technical decisions were always documented with:
+- **Decision Rationale**: Why this approach over alternatives
+- **Trade-off Analysis**: What's being optimized for and what's being sacrificed
+- **Success Criteria**: How to measure if the solution is working
+- **Implementation Strategy**: Step-by-step approach to implementation
+
+**Debug Logging Strategy:**
+Implemented comprehensive debug logging with:
+- **Emoji Indicators**: Visual categorization for different types of events
+- **Contextual Information**: Relevant state and timing data with each log
+- **Error Details**: Complete error context for troubleshooting
+- **Performance Metrics**: Processing time and resource usage tracking
+
+### Technical Debt Management Strategy
+
+**Conscious Technical Debt:**
+- **Temporary Complexity**: Accepting short-term complexity to meet deadlines
+- **Debt Documentation**: Clear tracking of what needs refactoring later
+- **Scheduled Refactoring**: Dedicated time for addressing accumulated debt
+- **Architecture Evolution**: Planning for system growth and changing requirements
+
+**Performance vs. Complexity Trade-offs:**
+- **Measure First**: Always profile before optimizing
+- **User-Focused Optimization**: Prioritize user-perceivable performance improvements
+- **Maintenance Cost Consideration**: Balance performance gains against code complexity
+- **Simplicity Priority**: Keep solutions simple until complexity is clearly justified
+
+These insights represent systematic approaches to technical problem-solving that emphasize understanding, documentation, and maintainable solutions over quick fixes. The session management implementation demonstrates how thoughtful architecture can solve complex user experience challenges while maintaining code quality and system reliability.

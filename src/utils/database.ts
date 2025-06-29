@@ -285,8 +285,9 @@ export async function getQuestionsForPractice(
   
   // Add user's previously answered questions if requested
   if (excludeAnsweredQuestions && userId) {
-    const answeredQuestions = await getUserAnsweredQuestions(userId)
-    excludeIds = [...excludeIds, ...answeredQuestions]
+    // TODO: Implement getUserAnsweredQuestions when session answers table is enabled
+    // For now, skip excluding answered questions to get basic functionality working
+    console.log('Skipping answered questions exclusion - function not implemented yet')
   }
   
   // Use the PostgreSQL function for efficient random selection
@@ -632,7 +633,7 @@ export async function getUserStudyStats(userId: string): Promise<{
   }
   
   // Session tracking removed - set default value for days since last study
-  let daysSinceLastStudy = 0
+  const daysSinceLastStudy = 0
   
   // Calculate goal progress (if user has goal score)
   let goalProgressPercentage = 0
