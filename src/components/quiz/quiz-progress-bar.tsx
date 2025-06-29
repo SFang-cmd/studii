@@ -1,7 +1,7 @@
 interface QuizProgressBarProps {
   currentQuestion: number;
   totalQuestions: number;
-  answeredQuestions: Set<string>;
+  correctAnswers: Set<string>;
   incorrectAnswers: Set<string>;
   onQuestionClick?: (questionNumber: number) => void;
   allowNavigation?: boolean;
@@ -10,7 +10,7 @@ interface QuizProgressBarProps {
 export function QuizProgressBar({ 
   currentQuestion, 
   totalQuestions, 
-  answeredQuestions,
+  correctAnswers,
   incorrectAnswers,
   onQuestionClick,
   allowNavigation = false
@@ -18,7 +18,7 @@ export function QuizProgressBar({
   return (
     <div className="bg-white rounded-full px-4 py-2 shadow-sm border border-gray-200 inline-flex items-center gap-2">
       {Array.from({ length: totalQuestions }, (_, index) => {
-        const isCorrect = answeredQuestions.has(index.toString());
+        const isCorrect = correctAnswers.has(index.toString());
         const isIncorrect = incorrectAnswers.has(index.toString());
         const isCurrent = index === currentQuestion;
         const canClick = allowNavigation && onQuestionClick;

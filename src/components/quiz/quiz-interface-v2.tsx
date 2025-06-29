@@ -90,12 +90,15 @@ export default function QuizInterface({
   
   // Track progress for current set by index (for progress bar)
   const answeredIndices = new Set<string>();
+  const correctIndices = new Set<string>();
   const incorrectIndices = new Set<string>();
   
   currentQuestions.forEach((question, index) => {
     if (currentSetAnswers[question.id]) {
       answeredIndices.add(index.toString());
-      if (question.correctAnswer !== currentSetAnswers[question.id]) {
+      if (question.correctAnswer === currentSetAnswers[question.id]) {
+        correctIndices.add(index.toString());
+      } else {
         incorrectIndices.add(index.toString());
       }
     }
@@ -365,9 +368,6 @@ export default function QuizInterface({
       }
     }
     
-    // Update session before moving to next set
-    await updateQuizSession();
-    
     // Move to next set
     console.log('➡️ Moving to next set:', currentSet + 1);
     setCurrentSet(prev => prev + 1);
@@ -502,7 +502,7 @@ export default function QuizInterface({
             <QuizProgressBar
               currentQuestion={currentQuestionIndex}
               totalQuestions={currentQuestions.length}
-              answeredQuestions={answeredIndices}
+              correctAnswers={correctIndices}
               incorrectAnswers={incorrectIndices}
               onQuestionClick={handleQuestionClick}
               allowNavigation={allCurrentSetCompleted}
@@ -536,7 +536,7 @@ export default function QuizInterface({
           <QuizProgressBar
             currentQuestion={currentQuestionIndex}
             totalQuestions={currentQuestions.length}
-            answeredQuestions={answeredIndices}
+            correctAnswers={correctIndices}
             incorrectAnswers={incorrectIndices}
             onQuestionClick={handleQuestionClick}
             allowNavigation={allCurrentSetCompleted}
