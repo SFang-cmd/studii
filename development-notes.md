@@ -28,6 +28,61 @@ The project build system has been fully stabilized with all compilation errors a
 - **Component Organization**: Proper export/import structure in component index files
 - **Performance**: React hook dependencies optimized to prevent unnecessary re-renders
 
+### June 30, 2025: Complete Skill Points System Implementation ✅
+
+#### Comprehensive Skill Tracking Architecture
+A complete skill points system has been implemented with set-based tracking, real-time point calculations, and database persistence:
+
+**SQL Infrastructure**:
+- **`update_user_skills(p_skill_scores JSONB)`** - Batch update multiple skill scores with user authentication
+- **`update_user_skill(p_skill_id TEXT, p_score INTEGER)`** - Update individual skill scores  
+- **`get_user_skills(p_skill_ids TEXT[])`** - Fetch current skill scores using proper JOIN syntax
+- **Security**: All functions use `auth.uid()` for user isolation and validation
+
+**API Endpoints**:
+- **`/api/update-user-skills`** - Calls SQL functions for skill score updates
+- **`/api/get-user-skills`** - Fetches skill scores with fallback to 200-point defaults
+
+**Set-Based State Management**:
+- **`initialSkillScores`** - Database baseline scores fetched at set start
+- **`currentSkillChanges`** - Cumulative point changes within current set
+- **`skillsInCurrentSet`** - Skills being tracked for the active question set
+- **Architecture**: Each set starts fresh with database as source of truth
+
+**Point Calculation Logic**:
+- **Correct Answers**: `+difficultyBand` points (1-7 scale from SAT API)
+- **Incorrect Answers**: `-(8 - difficultyBand)` points 
+- **Validation**: Scores clamped to 0-800 range matching SAT scale
+- **Timing**: Points calculated immediately after answer submission
+
+**Smart Skill Selection by Practice Level**:
+- **Overall Practice** (`'all'`): All skills from Math + English subjects (~35+ skills)
+- **Subject Practice** (`'subject'`): All skills within specified subject (Math or English)
+- **Domain Practice** (`'domain'`): All skills within specified domain (e.g., Algebra)
+- **Skill Practice** (`'skill'`): Skills extracted from actual questions (fallback)
+
+**UI Display Components**:
+- **Answer Explanation Page**: Individual question point change card with color coding
+- **Summary Page**: Skill change cards showing total set progress per skill
+- **Visual Feedback**: Green for gains, red for losses, consistent with app theme
+
+**Database Update Strategy**:
+- **Set Completion**: Skills updated when user clicks "Next Set" 
+- **Page Exit**: Skills updated on browser close, refresh, or navigation (beforeunload/pagehide events)
+- **Session Integration**: Leverages existing session completion infrastructure
+- **Error Handling**: Graceful fallbacks with comprehensive logging
+
+**SAT Structure Integration**:
+- **Helper Functions**: `getSkillIdsBySubject()`, `getSkillIdsByDomain()`, `getAllSkillIds()`
+- **Hierarchical Support**: Respects Subject → Domain → Skill relationships
+- **Type Safety**: Proper TypeScript interfaces throughout skill selection logic
+
+#### Known Issues & Future Improvements
+- **🐛 Back Button Bug**: Browser back button navigation does not trigger quiz session completion
+  - Impact: Skill progress may not be saved if user uses browser back
+  - Priority: Address in next development cycle
+  - Solution: Implement popstate event listener for browser navigation detection
+
 #### Current Technical Debt Status
 **Resolved**:
 - ✅ Build compilation errors blocking development

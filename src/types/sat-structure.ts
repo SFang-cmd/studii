@@ -290,6 +290,22 @@ export function getAllSkillIds(): string[] {
   );
 }
 
+export function getSkillIdsBySubject(subjectId: string): string[] {
+  const subject = getSubjectById(subjectId);
+  if (!subject) return [];
+  
+  return subject.domains.flatMap(domain => 
+    domain.skills.map(skill => skill.id)
+  );
+}
+
+export function getSkillIdsByDomain(domainId: string): string[] {
+  const domain = getDomainById(domainId);
+  if (!domain) return [];
+  
+  return domain.skills.map(skill => skill.id);
+}
+
 export function getDomainById(domainId: string): SATDomain | undefined {
   return domainMap.get(domainId)?.domain;
 }

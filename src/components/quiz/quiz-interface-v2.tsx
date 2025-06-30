@@ -5,6 +5,7 @@ import { QuestionCard } from './question-card';
 import { QuizProgressBar } from './quiz-progress-bar';
 import { AnswerExplanation } from './answer-explanation';
 import { QuizSummary } from './quiz-summary';
+import { getAllSkillIds, getSkillIdsBySubject, getSkillIdsByDomain } from '@/types/sat-structure';
 
 export interface QuizOption {
   id: string;
@@ -66,14 +67,185 @@ export default function QuizInterface({
   const sessionStartTime = useRef<number>(Date.now());
   const hasSessionCompleted = useRef<boolean>(false);
 
+  // Skill tracking for current set
+  const [initialSkillScores, setInitialSkillScores] = useState<Record<string, number>>({});
+  const [currentSkillChanges, setCurrentSkillChanges] = useState<Record<string, number>>({});
+  const [skillsInCurrentSet, setSkillsInCurrentSet] = useState<Set<string>>(new Set());
+
   // Current question data
-  const currentQuestions = allQuestionSets[currentSet] || [];
+  const currentQuestions = useMemo(() => allQuestionSets[currentSet] || [], [allQuestionSets, currentSet]);
   const currentQuestion = currentQuestions[currentQuestionIndex];
   const isLastQuestionInSet = currentQuestionIndex === currentQuestions.length - 1;
   
   // Helper to get current set's answers
   const currentSetAnswers = useMemo(() => selectedAnswersBySet[currentSet] || {}, [selectedAnswersBySet, currentSet]);
+
+  // Fetch initial skill scores for current set
+  const fetchInitialSkillScores = useCallback(async (questions: QuizQuestion[]) => {
+    console.log('🎯 SKILL TRACKING: Fetching initial skill scores for set');
+    console.log('🎯 SKILL TRACKING: Session level:', sessionLevel, 'Target ID:', sessionTargetId);
+    
+    let skillIds: string[] = [];
+
+    // Determine which skills to track based on session level
+    if (sessionLevel === 'all') {
+      // Overall practice - fetch all skills from both math and english
+      skillIds = getAllSkillIds();
+      console.log('🎯 SKILL TRACKING: Overall practice - fetching all skills');
+    } else if (sessionLevel === 'subject') {
+      // Subject practice - fetch all skills from the subject
+      skillIds = getSkillIdsBySubject(sessionTargetId);
+      console.log('🎯 SKILL TRACKING: Subject practice - fetching skills for subject:', sessionTargetId);
+    } else if (sessionLevel === 'domain') {
+      // Domain practice - fetch all skills from the domain
+      skillIds = getSkillIdsByDomain(sessionTargetId);
+      console.log('🎯 SKILL TRACKING: Domain practice - fetching skills for domain:', sessionTargetId);
+    } else {
+      // Skill practice or fallback - extract from questions
+      skillIds = Array.from(new Set(
+        questions
+          .map(q => q.skillId)
+          .filter((skillId): skillId is string => skillId !== undefined && !skillId.includes('fallback'))
+      ));
+      console.log('🎯 SKILL TRACKING: Skill/fallback practice - extracting from questions');
+    }
+
+    if (skillIds.length === 0) {
+      console.log('⚠️ SKILL TRACKING: No valid skill IDs found');
+      return;
+    }
+
+    console.log('🎯 SKILL TRACKING: Fetching scores for skills:', skillIds);
+    console.log('🎯 SKILL TRACKING: Total skills to track:', skillIds.length);
+    setSkillsInCurrentSet(new Set(skillIds));
+
+    try {
+      const response = await fetch('/api/get-user-skills', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          skillIds: skillIds
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch skill scores: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.result.success) {
+        const skillScores = result.result.skill_scores;
+        console.log('✅ SKILL TRACKING: Initial skill scores:', skillScores);
+        setInitialSkillScores(skillScores);
+        
+        // Reset skill changes for new set
+        const initialChanges = Object.keys(skillScores).reduce((acc, skillId) => {
+          acc[skillId] = 0;
+          return acc;
+        }, {} as Record<string, number>);
+        setCurrentSkillChanges(initialChanges);
+      } else {
+        console.error('❌ SKILL TRACKING: Failed to fetch skill scores:', result);
+      }
+    } catch (error) {
+      console.error('💥 SKILL TRACKING: Error fetching skill scores:', error);
+    }
+  }, [sessionLevel, sessionTargetId]);
+
+  // Calculate point change for a question
+  const calculatePointChange = useCallback((difficultyBand: number, isCorrect: boolean): number => {
+    if (isCorrect) {
+      // For correct answers: Add difficulty_band points
+      return difficultyBand;
+    } else {
+      // For incorrect answers: Subtract (8-difficulty_band) points
+      return -(8 - difficultyBand);
+    }
+  }, []);
+
+  // Update skill points after answering a question
+  const updateSkillPoints = useCallback((question: QuizQuestion, isCorrect: boolean) => {
+    if (!question.skillId || question.skillId.includes('fallback')) {
+      console.log('⚠️ SKILL TRACKING: Skipping skill update for question without valid skill');
+      return;
+    }
+
+    const pointChange = calculatePointChange(question.difficultyBand || 4, isCorrect);
+    console.log('🎯 SKILL TRACKING: Question answered');
+    console.log('  - Skill:', question.skillId);
+    console.log('  - Difficulty Band:', question.difficultyBand);
+    console.log('  - Correct:', isCorrect);
+    console.log('  - Point Change:', pointChange);
+
+    setCurrentSkillChanges(prev => ({
+      ...prev,
+      [question.skillId!]: (prev[question.skillId!] || 0) + pointChange
+    }));
+  }, [calculatePointChange]);
+
+  // Update user skills in database
+  const updateUserSkillsInDatabase = useCallback(async () => {
+    if (Object.keys(currentSkillChanges).length === 0) {
+      console.log('🎯 SKILL TRACKING: No skill changes to update');
+      return true;
+    }
+
+    console.log('🎯 SKILL TRACKING: Updating user skills in database');
+    console.log('  - Initial scores:', initialSkillScores);
+    console.log('  - Skill changes:', currentSkillChanges);
+
+    // Calculate new skill scores
+    const newSkillScores: Record<string, number> = {};
+    Object.keys(currentSkillChanges).forEach(skillId => {
+      const initialScore = initialSkillScores[skillId] || 200;
+      const change = currentSkillChanges[skillId] || 0;
+      const newScore = Math.max(0, Math.min(800, initialScore + change));
+      newSkillScores[skillId] = newScore;
+      
+      console.log(`  - ${skillId}: ${initialScore} + ${change} = ${newScore}`);
+    });
+
+    try {
+      const response = await fetch('/api/update-user-skills', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          skillScores: newSkillScores
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to update user skills: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('✅ SKILL TRACKING: User skills updated successfully:', result);
+        return true;
+      } else {
+        console.error('❌ SKILL TRACKING: Failed to update user skills:', result);
+        return false;
+      }
+    } catch (error) {
+      console.error('💥 SKILL TRACKING: Error updating user skills:', error);
+      return false;
+    }
+  }, [currentSkillChanges, initialSkillScores]);
   
+  // Fetch initial skill scores when set changes
+  useEffect(() => {
+    if (currentQuestions.length > 0) {
+      console.log('🔄 SKILL TRACKING: New question set detected, fetching initial skill scores');
+      fetchInitialSkillScores(currentQuestions);
+    }
+  }, [currentSet, currentQuestions, fetchInitialSkillScores]);
+
   // Debug current question state
   useEffect(() => {
     if (currentQuestion) {
@@ -139,6 +311,9 @@ export default function QuizInterface({
 
     console.log('Session completion data:', sessionData);
 
+    // Update user skills before completing session
+    await updateUserSkillsInDatabase();
+
     try {
       // Use sendBeacon for reliability during page unload
       if (navigator.sendBeacon) {
@@ -157,7 +332,7 @@ export default function QuizInterface({
     } catch (error) {
       console.log('Session completion error:', error);
     }
-  }, [sessionId, totalAnswered, totalCorrect]);
+  }, [sessionId, totalAnswered, totalCorrect, updateUserSkillsInDatabase]);
 
   // Session completion on page exit
   useEffect(() => {
@@ -335,6 +510,9 @@ export default function QuizInterface({
     console.log('  - Answers for current set:', Object.keys(currentSetAnswers));
     console.log('  - Current set answers object:', currentSetAnswers);
     
+    // Update user skills after completing the set
+    await updateUserSkillsInDatabase();
+    
     // Ensure next set is available
     if (!allQuestionSets[currentSet + 1]) {
       console.log('⏳ Fetching next set because it does not exist');
@@ -477,6 +655,9 @@ export default function QuizInterface({
       currentQuestion.difficultyBand,
       timeSpentSeconds
     );
+
+    // Update skill points based on answer
+    updateSkillPoints(currentQuestion, isCorrect);
     
     setQuizState('explanation');
     questionStartTime.current = Date.now();
@@ -546,6 +727,8 @@ export default function QuizInterface({
         onNextSet={handleNextSet}
         quizType="overall"
         isLoadingNextSet={isLoadingNextSet}
+        skillChanges={currentSkillChanges}
+        skillsInSet={skillsInCurrentSet}
       />
     );
   }
@@ -580,6 +763,7 @@ export default function QuizInterface({
           question={currentQuestion}
           selectedAnswer={currentSetAnswers[currentQuestion.id]}
           onNext={handleNextFromExplanation}
+          skillPointChange={currentQuestion.skillId ? currentSkillChanges[currentQuestion.skillId] : undefined}
         />
       </div>
     );

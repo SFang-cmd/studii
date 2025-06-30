@@ -16,6 +16,8 @@ interface QuizSummaryProps {
   onNextSet: () => void;
   quizType?: 'skill' | 'domain' | 'subject' | 'overall';
   isLoadingNextSet?: boolean;
+  skillChanges?: Record<string, number>;
+  skillsInSet?: Set<string>;
 }
 
 export function QuizSummary({
@@ -24,7 +26,9 @@ export function QuizSummary({
   selectedAnswers,
   onNextSet,
   quizType = 'overall',
-  isLoadingNextSet = false
+  isLoadingNextSet = false,
+  skillChanges = {},
+  skillsInSet = new Set()
 }: QuizSummaryProps) {
   // Calculate overall score
   const correctAnswers = questions.filter(q => selectedAnswers[q.id] === q.correctAnswer).length;
@@ -108,6 +112,29 @@ export function QuizSummary({
               {subjectMetrics.map(metric => (
                 <PerformanceCard key={metric.id} metric={metric} />
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Skill Changes Section */}
+        {skillsInSet.size > 0 && (
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-paynes-gray mb-4">Skill Points This Set</h3>
+            <div className="grid grid-cols-1 gap-4 max-w-2xl mx-auto">
+              {Array.from(skillsInSet).map(skillId => {
+                const pointChange = skillChanges[skillId] || 0;
+                // Get skill name from questions
+                const skillName = questions.find(q => q.skillId === skillId)?.skillName || skillId;
+                
+                return (
+                  <SkillChangeCard 
+                    key={skillId} 
+                    skillId={skillId}
+                    skillName={skillName}
+                    pointChange={pointChange}
+                  />
+                );
+              })}
             </div>
           </div>
         )}
@@ -204,4 +231,33 @@ function calculateMetricsByProperty(
   });
   
   return Object.values(metrics);
+}
+
+// Helper component for displaying skill point changes
+function SkillChangeCard({ 
+  skillName, 
+  pointChange 
+}: { 
+  skillId: string; 
+  skillName: string; 
+  pointChange: number; 
+}) {
+  return (
+    <div className="border rounded-lg p-4 bg-white shadow-sm">
+      <div className="flex justify-between items-center mb-2">
+        <h4 className="font-bold text-paynes-gray">{skillName}</h4>
+        <span className={`font-bold text-lg ${
+          pointChange > 0 ? 'text-emerald-600' : 
+          pointChange < 0 ? 'text-red-600' : 
+          'text-gray-600'
+        }`}>
+          {pointChange > 0 ? '+' : ''}{pointChange} points
+        </span>
+      </div>
+      
+      <p className="text-sm text-gray-600">
+        {pointChange > 0 ? 'Gained' : pointChange < 0 ? 'Lost' : 'No change'} this set
+      </p>
+    </div>
+  );
 }

@@ -7,12 +7,14 @@ interface AnswerExplanationProps {
   question: QuizQuestion;
   selectedAnswer: string;
   onNext: () => void;
+  skillPointChange?: number;
 }
 
 export function AnswerExplanation({ 
   question, 
   selectedAnswer, 
-  onNext
+  onNext,
+  skillPointChange
 }: AnswerExplanationProps) {
   const [chatMessage, setChatMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<Array<{type: 'user' | 'ai', message: string}>>([]);
@@ -86,6 +88,22 @@ export function AnswerExplanation({
               </span>
             </div>
           </div>
+
+          {/* Skill Point Change Card */}
+          {skillPointChange !== undefined && (
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <h3 className="text-lg font-bold text-paynes-gray mb-1">Skill Points</h3>
+              <p className="text-sm text-glaucous mb-2">Change This Question</p>
+              <div className="flex items-center gap-2">
+                <span className={`text-lg font-bold ${
+                  skillPointChange > 0 ? 'text-emerald-600' : 
+                  skillPointChange < 0 ? 'text-red-600' : 'text-gray-600'
+                }`}>
+                  {skillPointChange > 0 ? '+' : ''}{skillPointChange} points
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Answer Result */}
