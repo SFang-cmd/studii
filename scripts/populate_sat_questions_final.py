@@ -7,12 +7,15 @@ Using direct Supabase upsert pattern matching user's existing code style
 import os
 import json
 import time
+import random
 import requests
 from tqdm import tqdm
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import logging
 from typing import Dict, List, Optional
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Setup logging
 logging.basicConfig(
@@ -33,7 +36,19 @@ OVERVIEW_API = "https://qbank-api.collegeboard.org/msreportingquestionbank-prod/
 QUESTION_API = "https://qbank-api.collegeboard.org/msreportingquestionbank-prod/questionbank/digital/get-question"
 
 # Assessment event IDs to fetch
-ASMT_EVENT_IDS = [99, 100, 102, 103, 104, 105]
+ASMT_EVENT_IDS = [99, 100, 102]
+
+# Test configuration
+TEST_CONFIG = {
+    1: {
+        "name": "Reading and Writing", 
+        "domains": ["INI", "CAS", "EOI", "SEC"]
+    },
+    2: {
+        "name": "Math", 
+        "domains": ["H", "P", "Q", "S"]
+    }
+}
 
 # Complete SAT skill code mapping
 SAT_SKILL_MAPPING = {
@@ -83,18 +98,6 @@ SAT_SKILL_MAPPING = {
     'FSS': 'form-structure-sense'
 }
 
-# Test configuration
-TEST_CONFIG = {
-    1: {
-        "name": "Reading and Writing", 
-        "domains": ["INI", "CAS", "EOI", "SEC"]
-    },
-    2: {
-        "name": "Math", 
-        "domains": ["H", "P", "Q", "S"]
-    }
-}
-
 def preprocess_mathml_content(text: str) -> str:
     """
     Preprocess MathML content to replace mfenced tags with mo tags
@@ -123,17 +126,24 @@ class SATQuestionImporter:
         
         self.supabase: Client = create_client(url, key)
         
+        # Create a session without automatic retries (we'll handle retries manually)
         self.session = requests.Session()
+        
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
             'Accept': 'application/json',
             'Content-Type': 'application/json'
         })
         
+        # Statistics
         self.imported_count = 0
-        self.skipped_count = 0
-        self.failed_count = 0
         self.duplicate_count = 0
+        self.failed_count = 0
+        self.skipped_count = 0
+        self.retry_count = 0
+        
+        # Flag to indicate when a timeout occurs
+        self.timeout_occurred = False
     
     def fetch_question_overview(self, test_id: int, domain: str, event_id: int) -> List[Dict]:
         """Fetch question overview from SAT API"""
@@ -144,26 +154,48 @@ class SATQuestionImporter:
         }
         
         try:
-            response = self.session.post(OVERVIEW_API, json=payload, timeout=30)
+            # Single attempt with short timeout
+            response = self.session.post(OVERVIEW_API, json=payload, timeout=15)
             response.raise_for_status()
             
+            # Handle different response formats
             data = response.json()
-            return data if isinstance(data, list) else []
+            
+            # If data is a list, use it directly
+            if isinstance(data, list):
+                return data
+            
+            # If data is a dict with 'questions' key, use that
+            if isinstance(data, dict) and 'questions' in data:
+                return data['questions']
                 
+            # Otherwise return empty list
+            logger.warning(f"Unexpected response format for {domain}-{event_id}")
+            return []
+            
         except requests.RequestException as e:
-            logger.error(f"Failed to fetch overview for {domain}-{event_id}: {e}")
+            # Log the error and signal that we should move to a different domain/test
+            logger.error(f"Timeout or error fetching overview for {domain}-{event_id}: {str(e)}")
+            # Set a flag to indicate we should break out of the current domain/event
+            self.timeout_occurred = True
             return []
     
     def fetch_question_details(self, external_id: str) -> Optional[Dict]:
-        """Fetch detailed question data from SAT API"""
-        payload = {"external_id": external_id}
+        """Fetch detailed question data for a specific question"""
+        payload = {
+            "external_id": external_id
+        }
         
         try:
-            response = self.session.post(QUESTION_API, json=payload, timeout=30)
+            # Single attempt with short timeout
+            response = self.session.post(QUESTION_API, json=payload, timeout=10)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
-            logger.error(f"Failed to fetch question details for {external_id}: {e}")
+            # Log the error and signal that we should move to a different domain/test
+            logger.error(f"Timeout or error fetching question {external_id}: {str(e)}")
+            # Set a flag to indicate we should break out of the current domain/event
+            self.timeout_occurred = True
             return None
     
     def add_question(self, overview: dict, question: dict):
@@ -180,10 +212,50 @@ class SATQuestionImporter:
             sat_skill_code = overview.get('skill_cd')
             skill_id = SAT_SKILL_MAPPING.get(sat_skill_code) if sat_skill_code else None
             
-            if not skill_id and sat_skill_code:
+            if not sat_skill_code or sat_skill_code not in SAT_SKILL_MAPPING:
                 logger.warning(f"Unknown SAT skill code: {sat_skill_code}, skipping question {external_id}")
                 self.skipped_count += 1
                 return
+                
+            # Map domain and subject IDs based on SAT skill code
+            domain_id = None
+            subject_id = None
+            
+            if sat_skill_code:
+                # Math domains
+                if sat_skill_code.startswith('H.'):
+                    domain_id = 'algebra'
+                    subject_id = 'math'
+                elif sat_skill_code.startswith('P.'):
+                    domain_id = 'advanced-math'
+                    subject_id = 'math'
+                elif sat_skill_code.startswith('Q.'):
+                    domain_id = 'problem-solving-data-analysis'
+                    subject_id = 'math'
+                elif sat_skill_code.startswith('S.'):
+                    domain_id = 'geometry-trigonometry'
+                    subject_id = 'math'
+                # English domains
+                elif sat_skill_code in ['CID', 'INF', 'COE']:
+                    domain_id = 'information-ideas'
+                    subject_id = 'english'
+                elif sat_skill_code in ['WIC', 'TSP', 'CTC']:
+                    domain_id = 'craft-structure'
+                    subject_id = 'english'
+                elif sat_skill_code in ['SYN', 'TRA']:
+                    domain_id = 'expression-ideas'
+                    subject_id = 'english'
+                elif sat_skill_code in ['BOU', 'FSS']:
+                    domain_id = 'standard-english-conventions'
+                    subject_id = 'english'
+            
+            if not domain_id or not subject_id:
+                logger.warning(f"Could not map domain/subject for skill code: {sat_skill_code}, skipping question {external_id}")
+                self.skipped_count += 1
+                return
+                
+            # Log the domain/subject mapping for debugging
+            logger.debug(f"Mapped skill {sat_skill_code} to domain={domain_id}, subject={subject_id} for question {external_id}")
             
             # Process answer options based on question type
             if question["type"] == "mcq":
@@ -226,6 +298,8 @@ class SATQuestionImporter:
                         "answer_options": processed_answer_options,
                         "correct_answers": correct_answers,
                         "explanation": question.get("rationale"),
+                        "domain_id": domain_id,
+                        "subject_id": subject_id,
                         "is_active": True
                     }, on_conflict="sat_external_id", ignore_duplicates=True)
                     .execute()
@@ -257,6 +331,8 @@ class SATQuestionImporter:
                         "answer_options": None,  # No multiple choice options
                         "correct_answers": correct_answers,
                         "explanation": question.get("rationale"),
+                        "domain_id": domain_id,
+                        "subject_id": subject_id,
                         "is_active": True
                     }, on_conflict="sat_external_id", ignore_duplicates=True)
                     .execute()
@@ -281,9 +357,17 @@ class SATQuestionImporter:
         """Process all questions for a specific domain"""
         logger.info(f"Processing domain: {domain}")
         
+        # Reset timeout flag at the start of processing a new domain
+        self.timeout_occurred = False
+        
         for event_id in ASMT_EVENT_IDS:
             logger.info(f"  Fetching questions from event {event_id}")
             
+            # Skip INI-99 if we've already had a timeout
+            if event_id == 99 and self.timeout_occurred:
+                logger.warning("Skipping event 99 due to previous timeout")
+                continue
+                
             # Get question overview
             overview_questions = self.fetch_question_overview(test_id, domain, event_id)
             if not overview_questions:
@@ -292,7 +376,7 @@ class SATQuestionImporter:
             logger.info(f"  Found {len(overview_questions)} questions to process")
             
             # Process questions with rate limiting
-            for overview in tqdm(overview_questions, desc=f"  Processing {domain}-{event_id}"):
+            for i, overview in enumerate(tqdm(overview_questions, desc=f"  Processing {domain}-{event_id}")):
                 external_id = overview.get('external_id') or overview.get('externalid')
                 if not external_id:
                     self.skipped_count += 1
@@ -300,6 +384,13 @@ class SATQuestionImporter:
                 
                 # Fetch detailed question data
                 question_details = self.fetch_question_details(external_id)
+                
+                # Check if a timeout occurred
+                if self.timeout_occurred:
+                    logger.warning(f"Timeout detected at question {i+1}/{len(overview_questions)} with ID {external_id}")
+                    logger.warning(f"Breaking out of event {event_id} and moving to next")
+                    break
+                    
                 if not question_details:
                     self.failed_count += 1
                     continue
@@ -307,8 +398,19 @@ class SATQuestionImporter:
                 # Import the question
                 self.add_question(overview, question_details)
                 
-                # Rate limiting to avoid overwhelming the API
-                time.sleep(0.1)
+                # Basic rate limiting to avoid overwhelming the API
+                time.sleep(0.5)  # Basic delay between requests
+                
+                # Additional rate limiting with progressive delays
+                if (i + 1) % 10 == 0:  # Short pause every 10 questions
+                    pause_time = 2 + random.uniform(0, 1)
+                    logger.info(f"Short pause - sleeping for {pause_time:.1f}s after {i + 1} questions")
+                    time.sleep(pause_time)
+                    
+                if (i + 1) % 50 == 0:  # Longer pause every 50 questions
+                    pause_time = 15 + random.uniform(0, 5)
+                    logger.info(f"Rate limiting pause - sleeping for {pause_time:.1f}s after {i + 1} questions")
+                    time.sleep(pause_time)
     
     def run_import(self):
         """Main import process"""
@@ -338,18 +440,22 @@ class SATQuestionImporter:
         logger.info(f"Total duplicates skipped: {self.duplicate_count}")
         logger.info(f"Total failed: {self.failed_count}")
         logger.info(f"Total skipped: {self.skipped_count}")
+        logger.info(f"Total retries: {self.retry_count}")
         logger.info(f"Total processed: {self.imported_count + self.duplicate_count + self.failed_count + self.skipped_count}")
-        logger.info(f"Elapsed time: {elapsed_time:.2f} seconds")
+        logger.info(f"Elapsed time: {elapsed_time:.2f} seconds (avg {elapsed_time/(self.imported_count + self.duplicate_count + 0.001):.2f}s per successful question)")
 
 def main():
     """Main execution function"""
     try:
+        logger.info("Starting SAT question import with enhanced error handling and rate limiting")
         importer = SATQuestionImporter()
         importer.run_import()
     except KeyboardInterrupt:
         logger.info("Import interrupted by user")
     except Exception as e:
         logger.error(f"Fatal error during import: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         raise
 
 if __name__ == "__main__":

@@ -1,0 +1,22 @@
+2025-06-30 13:45:36,703 - INFO - Starting SAT question import
+2025-06-30 13:45:36,761 - INFO - Running targeted import for Test ID: 2, Domain: H, Event ID: 99
+2025-06-30 13:45:36,761 - INFO - Starting targeted SAT question import for Test 2, Domain H, Event 99
+2025-06-30 13:45:36,761 - INFO - Processing domain H for test 2
+2025-06-30 13:45:36,761 - INFO - Target event IDs: [99]
+2025-06-30 13:45:36,761 - INFO - Processing event ID 99 for domain H
+2025-06-30 13:45:37,020 - INFO - Found 519 questions for H-99
+2025-06-30 13:45:37,163 - WARNING - Missing question data for c240c048-e272-462b-b645-1751de050cdd
+2025-06-30 13:45:37,774 - WARNING - Missing question data for f1332d3b-a308-4640-95e0-cae936826d8d
+2025-06-30 13:45:38,406 - WARNING - Missing question data for 65ac5dc5-af25-4ecf-8562-a346047750a6
+2025-06-30 13:45:39,023 - WARNING - Missing question data for d384e4e9-870d-4026-ba15-b7eb23e0c5fc
+2025-06-30 13:45:39,668 - WARNING - Missing question data for ad73f33e-e2f7-442f-9463-281f925a0111
+2025-06-30 13:45:40,289 - WARNING - Missing question data for bfbc2147-51fa-4780-a273-d0cf88011d1c
+2025-06-30 13:45:40,922 - WARNING - Missing question data for 0478e0b5-4347-4ca3-81d3-9d8f3d89e005
+2025-06-30 13:45:41,518 - WARNING - Missing question data for 83c4d031-e8f1-4415-8c6c-33d11d65e85b
+2025-06-30 13:45:42,151 - WARNING - Missing question data for df1e58e8-b763-42a1-a3e2-b70a4bac09d5
+2025-06-30 13:45:42,653 - INFO - Short pause - sleeping for 2.2s after 10 questions
+2025-06-30 13:45:44,949 - WARNING - Missing question data for 031d354d-96ee-46e5-b453-c0be0ad459d5
+2025-06-30 13:45:45,564 - WARNING - Missing question data for 31182667-4cd9-4dea-af99-85f88f84bfa1
+2025-06-30 13:45:46,221 - WARNING - Missing question data for 07aee0d5-9ae6-4612-bbac-cad96d3eb3dd
+2025-06-30 13:45:46,898 - WARNING - Missing question data for 2b8c0dff-e373-422a-a150-3f281e461330
+2025-06-30 13:45:47,322 - INFO - Import interrupted by user
