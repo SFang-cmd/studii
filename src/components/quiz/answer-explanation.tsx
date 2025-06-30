@@ -148,7 +148,7 @@ export function AnswerExplanation({
 
       {/* Right Side - AI Chat */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col sticky top-4" style={{ height: '600px' }}>
-        <h3 className="text-xl font-bold text-paynes-gray mb-4">Ask AI Questions:</h3>
+        <h3 className="text-xl font-bold text-paynes-gray mb-4">Ask Stud-AI Questions:</h3>
         
         {/* Chat History - Fixed height scrollable container */}
         <div 
