@@ -289,15 +289,14 @@ export async function POST() {
     const results = [];
     for (const questionData of DUMMY_MATH_QUESTIONS) {
       const result = await createQuestion({
-        origin_id: 'custom',
+        origin: 'custom',
         question_text: questionData.question_text,
         question_type: 'mcq',
         skill_id: questionData.skill_id,
-        difficulty: questionData.difficulty_level,
+        difficulty_band: questionData.difficulty_level,
         answer_options: questionData.answer_options,
         correct_answers: questionData.correct_answers,
         explanation: questionData.explanation,
-        est_time_seconds: 90,
         is_active: true
       });
       

@@ -49,22 +49,37 @@ export async function POST(request: NextRequest) {
     }
 
     // Transform database questions to match the QuizQuestion interface
-    const transformedQuestions = questions.map(q => ({
-      id: q.id, // Preserve UUID
-      question: q.question_text,
-      stimulus: q.stimulus || undefined,
-      type: "multiple-choice" as const,
-      options: q.answer_options?.map(option => ({
-        id: option.id,
-        text: option.content
-      })) || [],
-      correctAnswer: q.correct_answers?.[0] || '',
-      explanation: q.explanation || 'No explanation available.',
-      category: level,
-      difficultyBand: q.difficulty_band !== null ? q.difficulty_band : undefined,
-      difficultyLetter: q.difficulty_letter !== null ? q.difficulty_letter : undefined,
-      skillId: q.skill_id
-    }));
+    const transformedQuestions = questions.map(q => {
+      // Randomize answer options and assign letter choices
+      const shuffledOptions = q.answer_options ? [...q.answer_options].sort(() => Math.random() - 0.5) : [];
+      const letterChoices = ['A', 'B', 'C', 'D'];
+      
+      // Map shuffled options to letter choices
+      const options = shuffledOptions.map((option, index) => ({
+        id: letterChoices[index],
+        text: option.content,
+        originalId: option.id // Keep original ID for correctness checking
+      }));
+      
+      // Find correct answer by matching original database ID to new letter choice
+      const correctOriginalId = q.correct_answers?.[0] || '';
+      const correctAnswerOption = options.find(opt => opt.originalId === correctOriginalId);
+      const correctAnswer = correctAnswerOption?.id || 'A'; // Default to A if not found
+      
+      return {
+        id: q.id, // Preserve UUID
+        question: q.question_text,
+        stimulus: q.stimulus || undefined,
+        type: "multiple-choice" as const,
+        options: options.map(opt => ({ id: opt.id, text: opt.text })), // Remove originalId from final output
+        correctAnswer,
+        explanation: q.explanation || 'No explanation available.',
+        category: level,
+        difficultyBand: q.difficulty_band !== null ? q.difficulty_band : undefined,
+        difficultyLetter: q.difficulty_letter !== null ? q.difficulty_letter : undefined,
+        skillId: q.skill_id
+      };
+    });
 
     console.log('🔄 Transformed questions count:', transformedQuestions.length);
     console.log('✅ API /questions/fetch - Completed successfully');

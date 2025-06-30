@@ -434,23 +434,17 @@ export async function importSATQuestion(satQuestion: {
   }))
   
   const questionData: QuestionInsert = {
-    origin_id: 'sat_official',
-    external_id: satQuestion.externalid,
-    source_question_id: satQuestion.questionId,
+    origin: 'sat_official',
+    sat_external_id: satQuestion.externalid,
     question_text: satQuestion.stem,
     stimulus: satQuestion.stimulus || undefined,
     question_type: satQuestion.type === 'mcq' ? 'mcq' : 'free_response',
     skill_id: skillId,
-    sat_skill_code: satQuestion.skill_cd,
-    sat_domain_code: satQuestion.primary_class_cd,
-    difficulty: difficultyLevel,
-    sat_difficulty_letter: satQuestion.difficulty,
     difficulty_band: satQuestion.score_band_range_cd || difficultyLevel,
+    difficulty_letter: satQuestion.difficulty,
     answer_options: answerOptions,
     correct_answers: satQuestion.correct_answer,
-    explanation: satQuestion.rationale,
-    sat_create_date: satQuestion.createDate,
-    sat_update_date: satQuestion.updateDate
+    explanation: satQuestion.rationale
   }
   
   return createQuestion(questionData)

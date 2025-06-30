@@ -144,16 +144,29 @@ async function fetchQuestionsForLevel(
     
     // Transform database questions to match the QuizQuestion interface
     const mappedQuestions = questions.map(q => {
+      // Randomize answer options and assign letter choices
+      const shuffledOptions = q.answer_options ? [...q.answer_options].sort(() => Math.random() - 0.5) : [];
+      const letterChoices = ['A', 'B', 'C', 'D'];
+      
+      // Map shuffled options to letter choices
+      const options = shuffledOptions.map((option, index) => ({
+        id: letterChoices[index],
+        text: option.content,
+        originalId: option.id // Keep original ID for correctness checking
+      }));
+      
+      // Find correct answer by matching original database ID to new letter choice
+      const correctOriginalId = q.correct_answers?.[0] || '';
+      const correctAnswerOption = options.find(opt => opt.originalId === correctOriginalId);
+      const correctAnswer = correctAnswerOption?.id || 'A'; // Default to A if not found
+      
       return {
         id: q.id, // Preserve the original UUID from database
         question: q.question_text,
         stimulus: q.stimulus || undefined,  // Correctly map stimulus to stimulus
         type: "multiple-choice" as const,
-        options: q.answer_options?.map(option => ({
-          id: option.id,
-          text: option.content
-        })) || [],
-        correctAnswer: q.correct_answers?.[0] || '',
+        options: options.map(opt => ({ id: opt.id, text: opt.text })), // Remove originalId from final output
+        correctAnswer,
         explanation: q.explanation || 'No explanation available.',
         category: contextName,
         // Convert null to undefined to match the QuizQuestion interface
