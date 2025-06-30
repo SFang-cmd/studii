@@ -802,6 +802,128 @@ const recordAnswer = useCallback(async (
 3. Verify session-answer relationship integrity
 4. Monitor performance impact and optimize if needed
 
+## SAT Question Import Pipeline (June 30, 2025)
+
+### Overview
+Implemented a comprehensive pipeline to import official SAT questions from the College Board API, including skill mapping, MathML preprocessing, and database integration.
+
+### Implementation Architecture
+
+#### Database Schema Enhancement
+```sql
+-- Added SAT-specific external ID field
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS sat_external_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_questions_sat_external_id_unique 
+ON questions(sat_external_id) WHERE sat_external_id IS NOT NULL;
+```
+
+#### API Integration Strategy
+**College Board Endpoints:**
+- **Overview API**: Fetches question metadata with skill codes and difficulty levels
+- **Detail API**: Retrieves full question content including HTML, figures, and explanations
+- **Rate Limiting**: 100ms delays between requests to respect server limits
+
+#### Skill Mapping System
+Created comprehensive mapping between SAT skill codes and internal skill IDs:
+```python
+SAT_SKILL_MAPPING = {
+    # Math Domains (25 skills total)
+    'H.A.': 'linear-equations-one-var',      # Algebra
+    'P.A.': 'equivalent-expressions',        # Advanced Math  
+    'Q.A.': 'ratios-rates-proportions',      # Problem Solving
+    'S.A.': 'area-volume',                   # Geometry
+    
+    # English Domains (10 skills total)
+    'CID': 'central-ideas-details',          # Information & Ideas
+    'WIC': 'words-in-context',               # Craft & Structure
+    'SYN': 'rhetorical-synthesis',           # Expression of Ideas
+    'BOU': 'boundaries'                      # Standard English Conventions
+}
+```
+
+#### MathML Preprocessing
+Implemented content preprocessing for mathematical notation compatibility:
+```python
+def preprocess_mathml_content(text: str) -> str:
+    """Fix MathML compatibility by replacing deprecated mfenced tags"""
+    if not text:
+        return text
+    
+    text = text.replace('<mfenced>', '<mo>(</mo>')
+    text = text.replace('</mfenced>', '<mo>)</mo>')
+    return text
+```
+
+Applied to:
+- Question text (stem)
+- Stimulus content (passages, figures) 
+- Answer option content
+
+### Import Script Architecture
+
+#### Production Script (`populate_sat_questions_final.py`)
+- **Domain Processing**: Iterates through all 8 SAT domains
+- **Event Coverage**: Handles multiple assessment event IDs (99, 100, 102, 103, 104, 105)
+- **Question Type Support**: Both MCQ (multiple choice) and SPR (student response)
+- **Error Handling**: Comprehensive logging and failure recovery
+- **Duplicate Prevention**: Uses `sat_external_id` for upsert operations
+
+#### Test Script (`test_import.py`)
+- **Comprehensive Coverage**: Tests all 8 domains with representative questions
+- **Validation Logic**: Ensures both MCQ and SPR question types work correctly
+- **Performance Metrics**: Tracks import success rates and timing
+- **Domain Analysis**: Reports skills tested per domain
+
+### Testing Results
+
+#### Comprehensive Domain Validation
+Successfully tested all 8 SAT domains:
+
+**Math Domains:**
+- ✅ **Algebra (H)**: 2 questions (1 MCQ, 1 SPR) - Skills H.A., H.B.
+- ✅ **Advanced Math (P)**: 2 questions (2 MCQ) - Skills P.A., P.B.  
+- ✅ **Problem Solving (Q)**: 2 questions (1 MCQ, 1 SPR) - Skills Q.A., Q.B.
+- ✅ **Geometry (S)**: 3 questions (1 MCQ, 2 SPR) - Skills S.A., S.B.
+
+**English Domains:**
+- ✅ **Information & Ideas (INI)**: 2 questions (2 MCQ) - Skills CID, INF
+- ✅ **Craft & Structure (CAS)**: 6 questions (6 MCQ) - Skills WIC, TSP
+- ✅ **Expression of Ideas (EOI)**: 2 questions (2 MCQ) - Skills SYN, TRA
+- ✅ **Standard English Conventions (SEC)**: 2 questions (2 MCQ) - Skills BOU, FSS
+
+**Overall Statistics:**
+- **Questions Imported**: 21 total
+- **Skills Tested**: 16 unique SAT skills
+- **Success Rate**: 100% (8/8 domains passed)
+- **Question Types**: Both MCQ and SPR working correctly
+
+### Security & Performance
+
+#### Row Level Security (RLS) Handling
+- Uses Supabase service key for bulk imports (bypasses RLS)
+- Maintains normal RLS for application operations
+- Secure credential management with environment variables
+
+#### Performance Optimizations
+- **Rate Limiting**: Prevents overwhelming College Board servers
+- **Batch Processing**: Efficient database operations
+- **Memory Management**: Streaming processing for large datasets
+- **Error Recovery**: Graceful handling of network/database issues
+
+### Architecture Benefits
+
+#### Scalability
+- Ready to import thousands of official SAT questions
+- Configurable batch sizes and rate limits
+- Domain-based processing allows parallel execution
+- Multiple assessment event support for content diversity
+
+#### Data Quality
+- MathML preprocessing ensures cross-browser compatibility
+- Skill code validation prevents mapping errors
+- Rich content preservation (HTML, figures, explanations)
+- Official SAT difficulty scaling (1-7) maintained
+
 This implementation provides the foundation for advanced features like adaptive difficulty, detailed progress analytics, and personalized learning recommendations.
 
 ---

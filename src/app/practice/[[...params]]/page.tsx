@@ -144,28 +144,48 @@ async function fetchQuestionsForLevel(
     
     // Transform database questions to match the QuizQuestion interface
     const mappedQuestions = questions.map(q => {
-      // Randomize answer options and assign letter choices
-      const shuffledOptions = q.answer_options ? [...q.answer_options].sort(() => Math.random() - 0.5) : [];
-      const letterChoices = ['A', 'B', 'C', 'D'];
+      console.log('Mapping question:', q.id, 'Type:', q.question_type);
       
-      // Map shuffled options to letter choices
-      const options = shuffledOptions.map((option, index) => ({
-        id: letterChoices[index],
-        text: option.content,
-        originalId: option.id // Keep original ID for correctness checking
-      }));
+      // Determine question type
+      const questionType = q.question_type === 'spr' ? 'free-response' as const : 'multiple-choice' as const;
+      console.log('Mapped question type:', questionType);
       
-      // Find correct answer by matching original database ID to new letter choice
-      const correctOriginalId = q.correct_answers?.[0] || '';
-      const correctAnswerOption = options.find(opt => opt.originalId === correctOriginalId);
-      const correctAnswer = correctAnswerOption?.id || 'A'; // Default to A if not found
+      // For multiple-choice questions, randomize options
+      let options: Array<{id: string, text: string, originalId?: string}> = [];
+      let correctAnswer = '';
+      
+      if (questionType === 'multiple-choice') {
+        // Randomize answer options and assign letter choices
+        const shuffledOptions = q.answer_options ? [...q.answer_options].sort(() => Math.random() - 0.5) : [];
+        const letterChoices = ['A', 'B', 'C', 'D'];
+        
+        // Map shuffled options to letter choices
+        options = shuffledOptions.map((option, index) => ({
+          id: letterChoices[index],
+          text: option.content,
+          originalId: option.id // Keep original ID for correctness checking
+        }));
+        
+        // Find correct answer by matching original database ID to new letter choice
+        const correctOriginalId = q.correct_answers?.[0] || '';
+        const correctAnswerOption = options.find(opt => opt.originalId === correctOriginalId);
+        correctAnswer = correctAnswerOption?.id || 'A'; // Default to A if not found
+        
+        // Remove originalId from final output
+        options = options.map(opt => ({ id: opt.id, text: opt.text }));
+      } else {
+        // For SPR questions, use empty options array and join all correct answers with commas
+        options = [];
+        correctAnswer = q.correct_answers?.join(',') || '';
+        console.log('SPR correct answers:', correctAnswer);
+      }
       
       return {
         id: q.id, // Preserve the original UUID from database
         question: q.question_text,
         stimulus: q.stimulus || undefined,  // Correctly map stimulus to stimulus
-        type: "multiple-choice" as const,
-        options: options.map(opt => ({ id: opt.id, text: opt.text })), // Remove originalId from final output
+        type: questionType,
+        options: options,
         correctAnswer,
         explanation: q.explanation || 'No explanation available.',
         category: contextName,

@@ -49,6 +49,249 @@ const [selectedAnswersBySet, setSelectedAnswersBySet] = useState<Record<number, 
 3. **Natural Cleanup**: Page refresh/navigation clears all state
 4. **UX Priority**: Clean question set experience outweighs minimal memory cost
 
+## SAT Question Import Pipeline: Large-Scale Data Integration (June 2025)
+
+### Challenge: Importing Thousands of Questions from External API
+
+**Problem Context:**
+The project required importing official SAT questions from the College Board API, involving complex data transformation, error handling, and maintaining data integrity across multiple question types and formats.
+
+**Technical Challenges:**
+1. **API Rate Limiting**: College Board servers have strict rate limits
+2. **Data Heterogeneity**: Questions have different types (MCQ vs SPR), difficulty scales, and content formats
+3. **Content Processing**: MathML preprocessing for mathematical notation compatibility
+4. **Database Integrity**: Preventing duplicates while supporting incremental updates
+5. **Skill Mapping**: Converting SAT skill codes to internal taxonomy (35+ skills across 8 domains)
+
+### Solution Architecture
+
+**Multi-Layer Processing Pipeline:**
+```python
+# Layer 1: API Abstraction
+class SATQuestionImporter:
+    def fetch_question_overview(self, test_id, domain, event_id)
+    def fetch_question_details(self, external_id)
+    
+# Layer 2: Data Transformation  
+def preprocess_mathml_content(text: str) -> str
+def map_domain_subject(sat_skill_code: str) -> tuple
+
+# Layer 3: Database Integration
+def add_question(self, overview: dict, question: dict)
+```
+
+**Key Design Decisions:**
+
+**1. Skill Code Mapping Strategy**
+```python
+SAT_SKILL_MAPPING = {
+    'H.A.': 'linear-equations-one-var',     # Algebra
+    'P.A.': 'equivalent-expressions',       # Advanced Math
+    'Q.A.': 'ratios-rates-proportions',     # Problem Solving
+    'S.A.': 'area-volume',                  # Geometry
+    # ... 31 more mappings
+}
+```
+**Rationale**: Static mapping provides predictable transformation while maintaining flexibility for future SAT curriculum changes.
+
+**2. MathML Preprocessing**
+```python
+def preprocess_mathml_content(text: str) -> str:
+    text = text.replace('<mfenced>', '<mo>(</mo>')
+    text = text.replace('</mfenced>', '<mo>)</mo>')
+    return text
+```
+**Challenge**: College Board uses deprecated `<mfenced>` tags that aren't supported in modern browsers.
+**Solution**: Convert to standardized `<mo>` tags during import rather than runtime processing.
+
+**3. Duplicate Prevention Strategy**
+```sql
+ALTER TABLE questions ADD COLUMN sat_external_id TEXT;
+CREATE UNIQUE INDEX idx_questions_sat_external_id_unique 
+ON questions(sat_external_id) WHERE sat_external_id IS NOT NULL;
+```
+**Design Decision**: Use SAT's external IDs as unique keys rather than content-based hashing.
+**Benefits**: Supports legitimate question updates while preventing true duplicates.
+
+### Performance Optimizations
+
+**Rate Limiting Implementation:**
+```python
+for overview in tqdm(overview_questions, desc=f"Processing {domain}"):
+    question_details = self.fetch_question_details(external_id)
+    self.add_question(overview, question_details)
+    time.sleep(0.1)  # 100ms delay between requests
+```
+
+**Memory Management:**
+- Streaming processing instead of loading all questions into memory
+- Progressive database writes prevent memory accumulation
+- Generator-based iteration for large datasets
+
+**Error Recovery Strategy:**
+```python
+try:
+    response = self.session.post(QUESTION_API, json=payload, timeout=30)
+    response.raise_for_status()
+    return response.json()
+except requests.RequestException as e:
+    logger.error(f"Failed to fetch question details for {external_id}: {e}")
+    return None
+```
+
+### Testing and Validation Architecture
+
+**Comprehensive Domain Testing:**
+```python
+DOMAIN_TEST_CONFIG = {
+    'H': {'test_id': 2, 'name': 'Algebra', 'target_skills': ['H.A.', 'H.B.']},
+    'P': {'test_id': 2, 'name': 'Advanced Math', 'target_skills': ['P.A.', 'P.B.']},
+    # ... all 8 domains
+}
+```
+
+**Results Validation:**
+- **Coverage**: 100% domain success rate (8/8 domains)
+- **Content Types**: Both MCQ and SPR questions imported successfully
+- **Data Quality**: MathML preprocessing applied to all mathematical content
+- **Scale Testing**: 21 test questions imported across 16 skills
+
+### Database Schema Evolution
+
+**Schema Enhancement Strategy:**
+```sql
+-- Additive approach - no breaking changes
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS sat_external_id TEXT;
+```
+**Rationale**: Maintain backward compatibility while adding new functionality.
+
+**Type System Alignment:**
+```typescript
+// Before: Mismatched interfaces
+question_type: 'mcq' | 'grid_in' | 'free_response'
+
+// After: Aligned with SAT reality
+question_type: 'mcq' | 'spr'
+```
+
+### Scalability Considerations
+
+**Production Deployment Strategy:**
+1. **Test Script First**: Validate all domains with small sample
+2. **Incremental Import**: Import by domain to isolate failures  
+3. **Progress Monitoring**: Comprehensive logging and statistics
+4. **Rollback Capability**: Transaction-based imports for atomic operations
+
+**Resource Management:**
+- **Virtual Environment**: Isolated Python dependencies
+- **Service Key Authentication**: Bypass Row Level Security for bulk operations
+- **Batch Processing**: Configurable batch sizes for different server capacities
+
+### Lessons Learned
+
+**1. External API Integration Best Practices**
+- Always implement comprehensive rate limiting
+- Design for partial failures and recovery
+- Validate data transformation with small samples before full import
+- Separate test and production scripts for safe validation
+
+**2. Database Schema Evolution**
+- Additive changes prevent breaking existing functionality
+- Unique constraints prevent data corruption from import bugs
+- Proper indexing strategies essential for performance at scale
+
+**3. Content Processing Challenges**
+- Mathematical notation requires preprocessing for web compatibility
+- Rich HTML content needs sanitization and validation
+- Different question types require flexible but consistent handling
+
+**4. Error Handling Strategy**
+- Fail fast for configuration errors, fail gracefully for data errors
+- Comprehensive logging essential for debugging large imports
+- Statistics tracking helps identify systematic issues vs random failures
+
+## Quiz Interface State Isolation: UUID Collision Resolution (June 2025)
+
+### Challenge: Handling UUID Display in User Interfaces
+
+**Problem Context:**
+Database answer options used UUID identifiers that were being displayed directly to users as answer choice labels, creating confusing UX where users saw `5dd0a0c7-c374-4df1-867e-bccb62c81db7` instead of "A", "B", "C", "D".
+
+**Technical Challenge:**
+Transform database UUIDs to user-friendly letters while:
+1. Preserving answer correctness mapping
+2. Randomizing choice order to prevent memorization
+3. Maintaining consistency across initial and dynamic question loading
+4. Ensuring type safety throughout the transformation
+
+### Solution Design
+
+**Transformation Pipeline:**
+```typescript
+// Step 1: Randomize database options
+const shuffledOptions = q.answer_options ? 
+  [...q.answer_options].sort(() => Math.random() - 0.5) : [];
+
+// Step 2: Assign letter choices
+const letterChoices = ['A', 'B', 'C', 'D'];
+const options = shuffledOptions.map((option, index) => ({
+  id: letterChoices[index],           // A, B, C, D
+  text: option.content,               // Answer text
+  originalId: option.id               // UUID for correctness mapping
+}));
+
+// Step 3: Map correct answer
+const correctOriginalId = q.correct_answers?.[0] || '';
+const correctAnswerOption = options.find(opt => opt.originalId === correctOriginalId);
+const correctAnswer = correctAnswerOption?.id || 'A';
+```
+
+**Key Design Insights:**
+
+**1. Separation of Display and Data Layers**
+- Display layer uses simple A-D letters
+- Data layer maintains database UUIDs for integrity
+- Transformation layer handles mapping between both
+
+**2. Randomization Strategy**
+- Fisher-Yates shuffle equivalent for small arrays
+- Consistent randomization across all question sources
+- Prevents students from memorizing answer patterns
+
+**3. Implementation Consistency**
+Applied identical transformation in multiple locations:
+- Initial server-side question loading
+- Dynamic API-based question fetching
+- Maintained type safety across all implementations
+
+**Error Handling Strategy:**
+```typescript
+// Graceful degradation for edge cases
+const correctAnswer = correctAnswerOption?.id || 'A'; // Default fallback
+const options = shuffledOptions.map((option, index) => ({
+  id: letterChoices[index] || `Option ${index + 1}`, // Handle >4 options
+  text: option.content || 'No content available',     // Handle missing content
+  originalId: option.id                                // Required for mapping
+}));
+```
+
+### Implementation Impact
+
+**User Experience Benefits:**
+- Clear, familiar A-D choice labels
+- Randomized options prevent pattern memorization  
+- Consistent experience across all practice modes
+
+**Technical Benefits:**
+- Type-safe transformation with proper TypeScript interfaces
+- No changes required to existing display components
+- Maintained database integrity and referential consistency
+
+**Performance Characteristics:**
+- O(n) transformation for n answer options (typically 4)
+- Minimal memory overhead (adding 1 character + original UUID)
+- No impact on database queries or API response times
+
 ## Real-Time Skill Progression System Architecture (June 2025)
 
 ### Challenge: Multi-Level Skill Tracking with Database Persistence

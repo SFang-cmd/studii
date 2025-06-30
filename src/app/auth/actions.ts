@@ -28,22 +28,39 @@ export async function login(formData: FormData) {
 }
 
 export async function signup(formData: FormData) {
+    console.log('Starting signup process...')
     const supabase = await createClient()
+    console.log('Supabase client created')
 
     const data = {
         email: formData.get('email') as string,
         password: formData.get('password') as string,
     }
+    console.log('Form data processed, email:', data.email)
 
-    const { error } = await supabase.auth.signUp(data)
+    try {
+        console.log('Attempting to sign up user...')
+        const { data: authData, error } = await supabase.auth.signUp(data)
+        console.log('Sign up response received')
 
-    if (error) {
-        console.error('Error signing up:', error)
+        if (error) {
+            console.error('Error signing up:', error)
+            console.error('Error details:', JSON.stringify(error, null, 2))
+            console.error('Error name:', error.name)
+            console.error('Error message:', error.message)
+            console.error('Error status:', error.status)
+            console.error('Error code:', error.code)
+            redirect('/auth/signup?error=signup_failed')
+            return
+        }
+
+        console.log('Signup successful, user data:', JSON.stringify(authData, null, 2))
+        redirect('/auth/login?message=check_email')
+    } catch (err) {
+        console.error('Exception during signup:', err)
+        console.error('Exception details:', JSON.stringify(err, null, 2))
         redirect('/auth/signup?error=signup_failed')
-        return
     }
-
-    redirect('/auth/login?message=check_email')
 }
 
 export async function logout() {

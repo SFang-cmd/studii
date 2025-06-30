@@ -112,39 +112,57 @@ export function AnswerExplanation({
             {question.correctAnswer} is the Correct Answer:
           </h3>
           
-          {/* Answer Options with Results */}
-          <div className="space-y-3 mb-6">
-            {question.options.map((option) => (
-              <div
-                key={option.id}
-                className={`p-4 rounded-xl border-2 ${
-                  option.id === question.correctAnswer
-                    ? 'border-emerald-500 bg-emerald-50'
-                    : option.id === selectedAnswer
-                    ? 'border-red-500 bg-red-50'
-                    : 'border-gray-200 bg-gray-50'
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold flex-shrink-0 ${
+          {/* Answer Options or Free Response */}
+          {question.type === 'multiple-choice' ? (
+            <div className="space-y-3 mb-6">
+              {question.options.map((option) => (
+                <div
+                  key={option.id}
+                  className={`p-4 rounded-xl border-2 ${
                     option.id === question.correctAnswer
-                      ? 'border-emerald-500 bg-emerald-500 text-white'
+                      ? 'border-emerald-500 bg-emerald-50'
                       : option.id === selectedAnswer
-                      ? 'border-red-500 bg-red-500 text-white'
-                      : 'border-gray-300 text-gray-600'
-                  }`}>
-                    {option.id === question.correctAnswer ? '✓' : option.id === selectedAnswer ? '✗' : option.id}
-                  </div>
-                  <div className="flex-1">
-                    <div 
-                      className="text-paynes-gray whitespace-pre-line"
-                      dangerouslySetInnerHTML={{ __html: option.text }}
-                    />
+                      ? 'border-red-500 bg-red-50'
+                      : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold flex-shrink-0 ${
+                      option.id === question.correctAnswer
+                        ? 'border-emerald-500 bg-emerald-500 text-white'
+                        : option.id === selectedAnswer
+                        ? 'border-red-500 bg-red-500 text-white'
+                        : 'border-gray-300 text-gray-600'
+                    }`}>
+                      {option.id === question.correctAnswer ? '✓' : option.id === selectedAnswer ? '✗' : option.id}
+                    </div>
+                    <div className="flex-1">
+                      <div 
+                        className="text-paynes-gray whitespace-pre-line"
+                        dangerouslySetInnerHTML={{ __html: option.text }}
+                      />
+                    </div>
                   </div>
                 </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3 mb-6">
+              <div className="p-4 rounded-xl border-2 border-gray-200 bg-gray-50">
+                <h3 className="font-medium mb-2">Your Answer:</h3>
+                <div className={`p-3 rounded-lg ${question.correctAnswer.includes(selectedAnswer) ? 'bg-emerald-50 border border-emerald-500' : 'bg-red-50 border border-red-500'}`}>
+                  <p className="font-medium">{selectedAnswer}</p>
+                </div>
               </div>
-            ))}
-          </div>
+              
+              <div className="p-4 rounded-xl border-2 border-emerald-500 bg-emerald-50">
+                <h3 className="font-medium mb-2">Correct Answer{question.correctAnswer.split(',').length > 1 ? 's' : ''}:</h3>
+                <div className="p-3 rounded-lg bg-white border border-emerald-500">
+                  <p className="font-medium">{question.correctAnswer.split(',').join(' or ')}</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Explanation */}
           <div className="border-t border-gray-200 pt-4">

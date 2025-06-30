@@ -660,7 +660,23 @@ export default function QuizInterface({
     if (!currentQuestion || !currentSetAnswers[currentQuestion.id]) return;
     
     const userAnswer = currentSetAnswers[currentQuestion.id];
-    const isCorrect = userAnswer === currentQuestion.correctAnswer;
+    let isCorrect = false;
+    
+    // Check answer based on question type
+    if (currentQuestion.type === 'multiple-choice') {
+      // For MCQ, direct comparison
+      isCorrect = userAnswer === currentQuestion.correctAnswer;
+    } else {
+      // For SPR, check if user answer matches any of the correct answers
+      // Split by comma if multiple correct answers exist
+      const correctAnswers = currentQuestion.correctAnswer.split(',');
+      // Normalize answers for comparison (trim whitespace, lowercase)
+      const normalizedUserAnswer = userAnswer.trim().toLowerCase();
+      isCorrect = correctAnswers.some(answer => 
+        answer.trim().toLowerCase() === normalizedUserAnswer
+      );
+    }
+    
     const timeSpentSeconds = Math.round((Date.now() - questionStartTime.current) / 1000);
     
     // Update session tracking stats
