@@ -33,6 +33,22 @@ The project build system has been fully stabilized with all compilation errors a
 #### Comprehensive Skill Tracking Architecture
 A complete skill points system has been implemented with set-based tracking, real-time point calculations, and database persistence:
 
+#### sendBeacon Fix for Tab Closure Skill Updates ✅
+**Problem**: Skill updates were lost when users closed tabs mid-quiz due to `fetch()` requests being cancelled during page unload.
+
+**Root Cause**: The `updateUserSkillsInDatabase()` function used async `fetch()` which doesn't complete during synchronous browser tab closure.
+
+**Solution**: Modified skill update function to accept `useBeacon` parameter:
+- **Normal operation** (set transitions): Uses `fetch()` with full error handling
+- **Tab closure**: Uses `sendBeacon()` designed for page unload events
+- **Implementation**: `await updateUserSkillsInDatabase(true)` in `completeSession()`
+
+**Technical Impact**:
+- ✅ Skill progress now persists during abrupt tab closures
+- ✅ Normal quiz flow unchanged with proper error handling
+- ✅ `sendBeacon()` ensures requests complete before page unload
+- ✅ No performance impact on regular quiz operation
+
 **SQL Infrastructure**:
 - **`update_user_skills(p_skill_scores JSONB)`** - Batch update multiple skill scores with user authentication
 - **`update_user_skill(p_skill_id TEXT, p_score INTEGER)`** - Update individual skill scores  

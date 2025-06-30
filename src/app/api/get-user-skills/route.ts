@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
     // Parse request body
     const { skillIds } = await request.json();
     
-    console.log('📊 Skill IDs to fetch:', skillIds);
+    // console.log('📊 Skill IDs to fetch:', skillIds);
+    console.log('📊 Number of Skill IDs:', skillIds.length);
     
     // Validate required fields
     if (!skillIds || !Array.isArray(skillIds) || skillIds.length === 0) {
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('✅ User skills fetched successfully:', result);
+    console.log('✅ User skills fetched successfully:');
     return NextResponse.json({ 
       success: true, 
       result: result

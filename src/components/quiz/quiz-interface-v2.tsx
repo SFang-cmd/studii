@@ -187,7 +187,7 @@ export default function QuizInterface({
   }, [calculatePointChange]);
 
   // Update user skills in database
-  const updateUserSkillsInDatabase = useCallback(async () => {
+  const updateUserSkillsInDatabase = useCallback(async (useBeacon = false) => {
     if (Object.keys(currentSkillChanges).length === 0) {
       console.log('🎯 SKILL TRACKING: No skill changes to update');
       return true;
@@ -208,29 +208,38 @@ export default function QuizInterface({
       console.log(`  - ${skillId}: ${initialScore} + ${change} = ${newScore}`);
     });
 
+    const requestData = { skillScores: newSkillScores };
+
     try {
-      const response = await fetch('/api/update-user-skills', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          skillScores: newSkillScores
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to update user skills: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.success) {
-        console.log('✅ SKILL TRACKING: User skills updated successfully:', result);
-        return true;
+      if (useBeacon && navigator.sendBeacon) {
+        // Use sendBeacon for page unload events
+        console.log('Using sendBeacon for skill update');
+        const success = navigator.sendBeacon('/api/update-user-skills', JSON.stringify(requestData));
+        console.log('sendBeacon result:', success);
+        return success;
       } else {
-        console.error('❌ SKILL TRACKING: Failed to update user skills:', result);
-        return false;
+        // Use regular fetch for normal operation
+        const response = await fetch('/api/update-user-skills', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update user skills: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        
+        if (result.success) {
+          console.log('✅ SKILL TRACKING: User skills updated successfully:', result);
+          return true;
+        } else {
+          console.error('❌ SKILL TRACKING: Failed to update user skills:', result);
+          return false;
+        }
       }
     } catch (error) {
       console.error('💥 SKILL TRACKING: Error updating user skills:', error);
@@ -311,8 +320,8 @@ export default function QuizInterface({
 
     console.log('Session completion data:', sessionData);
 
-    // Update user skills before completing session
-    await updateUserSkillsInDatabase();
+    // Update user skills before completing session (use beacon for page unload)
+    await updateUserSkillsInDatabase(true);
 
     try {
       // Use sendBeacon for reliability during page unload
@@ -341,13 +350,21 @@ export default function QuizInterface({
       completeSession();
     };
 
+    const handlePopState = (event: PopStateEvent) => {
+      console.log('Browser navigation detected (back/forward button):', event.type);
+      completeSession();
+    };
+
     // Listen for browser page unload events (covers refreshes, tab close, browser close)
     window.addEventListener('beforeunload', handlePageExit);
     window.addEventListener('pagehide', handlePageExit);
+    // Listen for browser back/forward navigation
+    window.addEventListener('popstate', handlePopState);
 
     return () => {
       window.removeEventListener('beforeunload', handlePageExit);
       window.removeEventListener('pagehide', handlePageExit);
+      window.removeEventListener('popstate', handlePopState);
     };
   }, [completeSession]);
 
