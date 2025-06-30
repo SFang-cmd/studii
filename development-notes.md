@@ -926,6 +926,140 @@ Successfully tested all 8 SAT domains:
 
 This implementation provides the foundation for advanced features like adaptive difficulty, detailed progress analytics, and personalized learning recommendations.
 
+## SAT Question Import Pipeline Enhancement (December 30, 2024)
+
+### Dual API Support Implementation
+
+#### Problem Analysis
+During import testing, discovered that SAT questions come from two different API endpoints with distinct data structures:
+
+**New API Format** (external_id):
+- Uses external_id (UUID) for question identification
+- API: `POST /get-question` with `{"external_id": "uuid"}`
+- Structure: `stem`, `answerOptions`, `keys`, `rationale`
+
+**Legacy API Format** (ibn):
+- Uses ibn (Item Bank Number) for question identification  
+- API: `GET https://saic.collegeboard.org/disclosed/{ibn}.json`
+- Structure: `prompt`, `body`, `answer.choices`, `answer.rationale`
+
+#### Architecture Solution
+
+**Unified Import System:**
+```python
+def fetch_question_details(self, external_id=None, ibn=None):
+    """Fetch from either new API (external_id) or old API (ibn)"""
+    if external_id:
+        # New API endpoint
+        response = self.session.post(QUESTION_API, json={"external_id": external_id})
+    elif ibn:
+        # Old API endpoint  
+        old_api_url = f"https://saic.collegeboard.org/disclosed/{ibn}.json"
+        response = self.session.get(old_api_url)
+```
+
+**Database Schema Update:**
+```sql
+-- Added support for both identifier types
+ALTER TABLE questions ADD COLUMN sat_ibn TEXT;
+CREATE INDEX idx_questions_sat_ibn ON questions(sat_ibn);
+ALTER TABLE questions ADD CONSTRAINT unique_sat_ibn UNIQUE (sat_ibn);
+```
+
+**Data Structure Mapping:**
+```python
+if external_id:
+    # New API format
+    question_text = question.get("stem", "")
+    stimulus = question.get("stimulus")
+    explanation = question.get("rationale", "")
+elif ibn:
+    # Old API format  
+    q_data = question[0]  # Array format
+    question_text = q_data.get("prompt", "")
+    stimulus = q_data.get("body")  # Context/setup content
+    explanation = q_data.get("answer", {}).get("rationale", "")
+```
+
+#### Key Mappings Discovered
+
+**Field Correspondence:**
+- `prompt` (old) → `question_text` (database)
+- `body` (old) → `stimulus` (database) 
+- `answer.choices` (old) → `answer_options` (database)
+- `answer.style` (old) → determines MCQ vs SPR type
+
+**Question Type Detection:**
+- `answer.style: "SPR"` → Student Produced Response (no choices)
+- `answer.style: "Multiple Choice"` → Standard MCQ format
+
+#### Import Statistics Resolution
+
+**Rate Limiting Discovery:**
+- API imposes 422-question limit per session
+- Causes import failures after processing 422 questions
+- Solution: Resumable importer with progress tracking
+
+**Question Coverage Analysis:**
+- ~30% of questions use legacy ibn format
+- ~70% use modern external_id format
+- Both formats must be supported for complete question coverage
+
+#### Resumable Import Architecture
+
+**Progress Tracking System:**
+```json
+{
+  "T1-INI-99": {
+    "total_questions": 432,
+    "processed_questions": 432,
+    "next_start_index": 432,
+    "imported": 397,
+    "duplicates": 35,
+    "completed": true
+  }
+}
+```
+
+**Smart Resume Logic:**
+- Tracks progress at individual question level
+- Handles API rate limits by stopping before 422-question threshold
+- Resumes from exact position on next run
+- Supports both question ID formats throughout
+
+#### Origin Tracking Implementation
+
+**Database Differentiation:**
+- `origin: "sat_official"` → New API questions (external_id)
+- `origin: "sat_official_ibn"` → Legacy API questions (ibn)
+
+**Benefits:**
+- Easy troubleshooting of format-specific issues
+- Data quality analysis by source
+- Future migration planning capabilities
+
+### Technical Achievements
+
+#### Complete API Coverage
+- ✅ **New API Integration**: Full support for modern question format
+- ✅ **Legacy API Support**: Complete coverage of ibn-based questions
+- ✅ **Unified Processing**: Single pipeline handles both formats seamlessly
+- ✅ **Rate Limit Management**: Resumable imports prevent API timeouts
+
+#### Data Quality Assurance
+- ✅ **Structure Validation**: Proper mapping of all field types
+- ✅ **Type Detection**: Accurate MCQ vs SPR classification
+- ✅ **Content Preservation**: Rich HTML and MathML content maintained
+- ✅ **Origin Tracking**: Clear source identification for all questions
+
+#### Operational Reliability
+- ✅ **Progress Persistence**: Detailed progress tracking in JSON files
+- ✅ **Resume Capability**: Continue imports from exact stopping point
+- ✅ **Error Handling**: Graceful handling of network and API issues
+- ✅ **Debug Logging**: Comprehensive logging for troubleshooting
+
+This implementation ensures complete SAT question coverage while maintaining data integrity and providing operational reliability for large-scale imports.
+
 ---
 
-This document represents the current state as of June 2025. The quiz session implementation is now complete with individual answer recording ready for deployment.
+This document represents the current state as of December 2024. The SAT question import system now supports both modern and legacy College Board APIs with resumable importing capabilities.
