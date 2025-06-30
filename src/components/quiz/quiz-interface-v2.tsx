@@ -400,10 +400,66 @@ export default function QuizInterface({
     }));
   };
 
+  // Record individual answer to database
+  const recordAnswer = useCallback(async (
+    questionId: string,
+    userAnswer: string,
+    correctAnswer: string,
+    isCorrect: boolean,
+    skillId?: string,
+    difficultyLevel?: number,
+    timeSpentSeconds?: number
+  ) => {
+    if (!sessionId) {
+      console.log('📝 No sessionId available for answer recording');
+      return;
+    }
+
+    // Skip recording for fallback questions
+    if (questionId.includes('fallback')) {
+      console.log('📝 Skipping answer recording for fallback question');
+      return;
+    }
+
+    try {
+      console.log('📝 Recording answer for question:', questionId);
+      
+      const response = await fetch('/api/record-answer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId,
+          questionId,
+          skillId,
+          difficultyLevel,
+          userAnswer,
+          correctAnswer,
+          isCorrect,
+          timeSpentSeconds,
+          attemptNumber: 1
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('✅ Answer recorded successfully:', result.answer_id);
+      } else {
+        console.error('❌ Failed to record answer:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Error recording answer:', error);
+    }
+  }, [sessionId]);
+
   const handleSubmitAnswer = async () => {
     if (!currentQuestion || !currentSetAnswers[currentQuestion.id]) return;
     
-    const isCorrect = currentSetAnswers[currentQuestion.id] === currentQuestion.correctAnswer;
+    const userAnswer = currentSetAnswers[currentQuestion.id];
+    const isCorrect = userAnswer === currentQuestion.correctAnswer;
+    const timeSpentSeconds = Math.round((Date.now() - questionStartTime.current) / 1000);
     
     // Update session tracking stats
     setTotalAnswered(prev => prev + 1);
@@ -411,7 +467,16 @@ export default function QuizInterface({
       setTotalCorrect(prev => prev + 1);
     }
     
-    // Answer recording removed - will be reimplemented later
+    // Record the individual answer to database
+    await recordAnswer(
+      currentQuestion.id,
+      userAnswer,
+      currentQuestion.correctAnswer,
+      isCorrect,
+      currentQuestion.skillId,
+      currentQuestion.difficultyBand,
+      timeSpentSeconds
+    );
     
     setQuizState('explanation');
     questionStartTime.current = Date.now();
