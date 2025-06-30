@@ -166,10 +166,14 @@ export default function QuizInterface({
     }
   }, []);
 
+  // Track individual question point changes
+  const [lastQuestionPointChange, setLastQuestionPointChange] = useState<number>(0);
+
   // Update skill points after answering a question
   const updateSkillPoints = useCallback((question: QuizQuestion, isCorrect: boolean) => {
     if (!question.skillId || question.skillId.includes('fallback')) {
       console.log('⚠️ SKILL TRACKING: Skipping skill update for question without valid skill');
+      setLastQuestionPointChange(0);
       return;
     }
 
@@ -179,6 +183,9 @@ export default function QuizInterface({
     console.log('  - Difficulty Band:', question.difficultyBand);
     console.log('  - Correct:', isCorrect);
     console.log('  - Point Change:', pointChange);
+
+    // Store the individual question point change for display
+    setLastQuestionPointChange(pointChange);
 
     setCurrentSkillChanges(prev => ({
       ...prev,
@@ -780,7 +787,7 @@ export default function QuizInterface({
           question={currentQuestion}
           selectedAnswer={currentSetAnswers[currentQuestion.id]}
           onNext={handleNextFromExplanation}
-          skillPointChange={currentQuestion.skillId ? currentSkillChanges[currentQuestion.skillId] : undefined}
+          skillPointChange={lastQuestionPointChange}
         />
       </div>
     );

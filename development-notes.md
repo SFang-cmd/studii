@@ -30,6 +30,33 @@ The project build system has been fully stabilized with all compilation errors a
 
 ### June 30, 2025: Complete Skill Points System Implementation ✅
 
+#### Skill Point Display Bug Fix ✅ (June 30, 2025)
+**Problem**: Skill point display showed compounding values instead of isolated per-question changes. For difficulty bands [2, 2, 1] with answers [correct, wrong, wrong], it displayed +2, -4, -11 points instead of the expected +2, -6, -7 points.
+
+**Root Cause**: The `AnswerExplanation` component received cumulative skill changes (`currentSkillChanges[skillId]`) rather than individual question point changes.
+
+**Solution**: 
+- Added `lastQuestionPointChange` state to track individual question points
+- Modified `updateSkillPoints()` to store per-question point changes separately
+- Updated explanation screen to display individual question points while preserving cumulative tracking for database updates
+
+**Implementation**:
+```typescript
+// Track individual question point changes
+const [lastQuestionPointChange, setLastQuestionPointChange] = useState<number>(0);
+
+// Store individual point change for display
+setLastQuestionPointChange(pointChange);
+
+// Pass individual change to explanation screen
+skillPointChange={lastQuestionPointChange}
+```
+
+**Results**:
+- ✅ Individual question points displayed correctly (+2, -6, -7)
+- ✅ Cumulative skill tracking preserved for database updates
+- ✅ Clean separation between UI display and backend calculations
+
 #### Comprehensive Skill Tracking Architecture
 A complete skill points system has been implemented with set-based tracking, real-time point calculations, and database persistence:
 
