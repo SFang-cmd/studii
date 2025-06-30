@@ -95,6 +95,21 @@ TEST_CONFIG = {
     }
 }
 
+def preprocess_mathml_content(text: str) -> str:
+    """
+    Preprocess MathML content to replace mfenced tags with mo tags
+    """
+    if not text:
+        return text
+    
+    # Replace opening mfenced tags with mo opening parenthesis
+    text = text.replace('<mfenced>', '<mo>(</mo>')
+    
+    # Replace closing mfenced tags with mo closing parenthesis  
+    text = text.replace('</mfenced>', '<mo>)</mo>')
+    
+    return text
+
 class SATQuestionImporter:
     
     def __init__(self):
@@ -178,9 +193,11 @@ class SATQuestionImporter:
                 
                 for option in answer_options:
                     if isinstance(option, dict) and 'id' in option:
+                        # Preprocess answer option content for MathML
+                        option_content = str(option.get('content', option.get('text', '')))
                         processed_answer_options.append({
                             'id': str(option['id']),
-                            'content': str(option.get('content', option.get('text', ''))),
+                            'content': preprocess_mathml_content(option_content),
                             'is_correct': option.get('is_correct', False)
                         })
                 
@@ -189,14 +206,18 @@ class SATQuestionImporter:
                 if isinstance(correct_answers, str):
                     correct_answers = [correct_answers]
                 
+                # Preprocess question text and stimulus for MathML
+                question_text = preprocess_mathml_content(question.get("stem", ""))
+                stimulus = preprocess_mathml_content(question.get("stimulus")) if question.get("stimulus") else None
+                
                 # Upsert MCQ question
                 response = (
                     self.supabase.table("questions")
                     .upsert({
                         "origin": "sat_official",
                         "sat_external_id": external_id,
-                        "question_text": question.get("stem", ""),
-                        "stimulus": question.get("stimulus"),
+                        "question_text": question_text,
+                        "stimulus": stimulus,
                         "question_type": question["type"],
                         "skill_id": skill_id,
                         "sat_program": overview.get("program", "SAT"),
@@ -210,11 +231,15 @@ class SATQuestionImporter:
                     .execute()
                 )
                 
-            elif question["type"] in ["spr", "grid_in", "free_response"]:
+            elif question["type"] == "spr":
                 # Handle student-produced response questions
                 correct_answers = question.get('keys', question.get('correct_answers', []))
                 if isinstance(correct_answers, str):
                     correct_answers = [correct_answers]
+                
+                # Preprocess question text and stimulus for MathML
+                question_text = preprocess_mathml_content(question.get("stem", ""))
+                stimulus = preprocess_mathml_content(question.get("stimulus")) if question.get("stimulus") else None
                 
                 # Upsert SPR/Grid-in question
                 response = (
@@ -222,9 +247,9 @@ class SATQuestionImporter:
                     .upsert({
                         "origin": "sat_official",
                         "sat_external_id": external_id,
-                        "question_text": question.get("stem", ""),
-                        "stimulus": question.get("stimulus"),
-                        "question_type": "grid_in" if question["type"] == "spr" else question["type"],
+                        "question_text": question_text,
+                        "stimulus": stimulus,
+                        "question_type": question["type"],
                         "skill_id": skill_id,
                         "sat_program": overview.get("program", "SAT"),
                         "difficulty_band": overview.get("score_band_range_cd", 3),

@@ -91,6 +91,21 @@ DOMAIN_TEST_CONFIG = {
     'SEC': {'test_id': 1, 'name': 'Standard English Conventions', 'target_skills': ['BOU', 'FSS']}
 }
 
+def preprocess_mathml_content(text: str) -> str:
+    """
+    Preprocess MathML content to replace mfenced tags with mo tags
+    """
+    if not text:
+        return text
+    
+    # Replace opening mfenced tags with mo opening parenthesis
+    text = text.replace('<mfenced>', '<mo>(</mo>')
+    
+    # Replace closing mfenced tags with mo closing parenthesis  
+    text = text.replace('</mfenced>', '<mo>)</mo>')
+    
+    return text
+
 class TestImporter:
     
     def __init__(self):
@@ -258,9 +273,11 @@ class TestImporter:
                 
                 for option in answer_options:
                     if isinstance(option, dict) and 'id' in option:
+                        # Preprocess answer option content for MathML
+                        option_content = str(option.get('content', ''))
                         processed_answer_options.append({
                             'id': str(option['id']),
-                            'content': str(option.get('content', '')),
+                            'content': preprocess_mathml_content(option_content),
                             'is_correct': option.get('is_correct', False)
                         })
                 
@@ -273,14 +290,18 @@ class TestImporter:
                 
                 logger.info(f"  Correct answers: {correct_answers}")
                 
+                # Preprocess question text and stimulus for MathML
+                question_text = preprocess_mathml_content(question.get("stem", ""))
+                stimulus = preprocess_mathml_content(question.get("stimulus")) if question.get("stimulus") else None
+                
                 # Test upsert
                 response = (
                     self.supabase.table("questions")
                     .upsert({
                         "origin": "sat_official",
                         "sat_external_id": external_id,
-                        "question_text": question.get("stem", ""),
-                        "stimulus": question.get("stimulus"),
+                        "question_text": question_text,
+                        "stimulus": stimulus,
                         "question_type": question["type"],
                         "skill_id": skill_id,
                         "domain_id": domain_id,
@@ -305,15 +326,19 @@ class TestImporter:
                 logger.info(f"  Student-produced response")
                 logger.info(f"  Correct answers: {correct_answers}")
                 
+                # Preprocess question text and stimulus for MathML
+                question_text = preprocess_mathml_content(question.get("stem", ""))
+                stimulus = preprocess_mathml_content(question.get("stimulus")) if question.get("stimulus") else None
+                
                 # Test upsert
                 response = (
                     self.supabase.table("questions")
                     .upsert({
                         "origin": "sat_official",
                         "sat_external_id": external_id,
-                        "question_text": question.get("stem", ""),
-                        "stimulus": question.get("stimulus"),
-                        "question_type": "grid_in",  # Convert spr to grid_in
+                        "question_text": question_text,
+                        "stimulus": stimulus,
+                        "question_type": "spr",
                         "skill_id": skill_id,
                         "domain_id": domain_id,
                         "subject_id": subject_id,
