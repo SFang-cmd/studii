@@ -113,7 +113,7 @@ export interface Question {
   sat_external_id: string | null; // SAT API external_id
   question_text: string;
   stimulus: string | null;
-  question_type: string; // 'mcq' | 'grid_in' | 'free_response'
+  question_type: string; // 'mcq' | 'spr'
   skill_id: string;
   domain_id: string;
   subject_id: string;
@@ -133,7 +133,7 @@ export interface QuestionInsert {
   sat_external_id?: string; // SAT API external_id
   question_text: string;
   stimulus?: string;
-  question_type?: 'mcq' | 'grid_in' | 'free_response';
+  question_type?: 'mcq' | 'spr';
   skill_id: string;
   domain_id?: string;
   subject_id?: string;
@@ -151,7 +151,7 @@ export interface QuestionUpdate {
   sat_external_id?: string; // SAT API external_id
   question_text?: string;
   stimulus?: string;
-  question_type?: 'mcq' | 'grid_in' | 'free_response';
+  question_type?: 'mcq' | 'spr';
   skill_id?: string;
   domain_id?: string;
   subject_id?: string;
