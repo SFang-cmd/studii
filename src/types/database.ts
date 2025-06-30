@@ -110,6 +110,7 @@ export interface AnswerOption {
 export interface Question {
   id: string;
   origin: string;
+  sat_external_id: string | null; // SAT API external_id
   question_text: string;
   stimulus: string | null;
   question_type: string; // 'mcq' | 'grid_in' | 'free_response'
@@ -122,61 +123,45 @@ export interface Question {
   answer_options: AnswerOption[] | null;
   correct_answers: string[];
   explanation: string | null;
-  est_time_seconds: number | null;
-  tags: string[];
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
 export interface QuestionInsert {
-  origin_id?: string;
-  external_id?: string;
-  source_question_id?: string;
+  origin?: string;
+  sat_external_id?: string; // SAT API external_id
   question_text: string;
   stimulus?: string;
   question_type?: 'mcq' | 'grid_in' | 'free_response';
   skill_id: string;
-  domain_id?: string; // New field for direct domain reference
-  subject_id?: string; // New field for direct subject reference
-  sat_skill_code?: string;
-  sat_domain_code?: string;
+  domain_id?: string;
+  subject_id?: string;
   sat_program?: string;
-  difficulty: number; // Changed from difficulty_level to match database schema
-  sat_difficulty_letter?: string;
-  difficulty_band?: number; // Renamed from sat_score_band for clarity
+  difficulty_band?: number;
+  difficulty_letter?: string;
   answer_options?: AnswerOption[];
   correct_answers: string[];
   explanation?: string;
-  est_time_seconds?: number;
-  tags?: string[];
   is_active?: boolean;
-  sat_create_date?: number;
-  sat_update_date?: number;
 }
 
 export interface QuestionUpdate {
-  origin_id?: string;
-  external_id?: string;
-  source_question_id?: string;
+  origin?: string;
+  sat_external_id?: string; // SAT API external_id
   question_text?: string;
   stimulus?: string;
   question_type?: 'mcq' | 'grid_in' | 'free_response';
   skill_id?: string;
-  sat_skill_code?: string;
-  sat_domain_code?: string;
+  domain_id?: string;
+  subject_id?: string;
   sat_program?: string;
-  difficulty_level?: number;
-  sat_difficulty_letter?: string;
-  sat_score_band?: number;
+  difficulty_band?: number;
+  difficulty_letter?: string;
   answer_options?: AnswerOption[];
   correct_answers?: string[];
   explanation?: string;
-  est_time_seconds?: number;
-  tags?: string[];
   is_active?: boolean;
-  sat_create_date?: number;
-  sat_update_date?: number;
 }
 
 // ==================== USER PROFILES ====================
