@@ -62,3 +62,33 @@ table, th, td {
 .cta-btn:hover {
   background-color: #fe4a3f !important;
 }
+
+/* Math expression styling for inline display */
+.math_expression {
+  display: inline;
+  line-height: 1;
+}
+
+.math-container {
+  display: inline;
+  line-height: 1;
+}
+
+.math-img {
+  display: inline !important;
+  vertical-align: middle;
+  margin: 0 2px;
+  max-height: 1.5em;
+  height: auto;
+  line-height: 1;
+}
+
+/* Ensure parent paragraphs display math expressions inline */
+.stem_paragraph .math_expression,
+.stem_paragraph .math-container {
+  display: inline;
+}
+
+.stem_paragraph .math-img {
+  vertical-align: baseline;
+}
