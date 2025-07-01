@@ -438,7 +438,7 @@ export async function importSATQuestion(satQuestion: {
     sat_external_id: satQuestion.externalid,
     question_text: satQuestion.stem,
     stimulus: satQuestion.stimulus || undefined,
-    question_type: satQuestion.type === 'mcq' ? 'mcq' : 'free_response',
+    question_type: satQuestion.type === 'spr' ? 'spr' : 'mcq',
     skill_id: skillId,
     difficulty_band: satQuestion.score_band_range_cd || difficultyLevel,
     difficulty_letter: satQuestion.difficulty,
