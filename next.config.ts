@@ -1,10 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'standalone', // For Docker deployment
-  experimental: {
-    serverComponentsExternalPackages: ['@supabase/supabase-js']
-  }
+  output: 'standalone',
+  serverExternalPackages: ['@supabase/supabase-js']
 };
 
 export default nextConfig;
