@@ -44,3 +44,23 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# SAT Import Progress Files (runtime data)
+scripts/sat_import_*.json
+scripts/sat_import*.log
+
+# Deprecated files
+scripts/(depracated)*
+scripts/diagnose_*.py
